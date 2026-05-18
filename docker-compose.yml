@@ -22,7 +22,6 @@ services:
     container_name: resume_rag_api
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/resume_rag
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       DEBUG: "false"
     ports:

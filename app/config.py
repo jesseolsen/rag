@@ -6,7 +6,6 @@ class Settings(BaseSettings):
     database_url: str
 
     # API Keys
-    openai_api_key: str
     anthropic_api_key: str
 
     # Server
