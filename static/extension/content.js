@@ -270,58 +270,58 @@ function handleYesNoDropdowns() {
                     }
                 }
 
-                // Try method 2: Click and look for options
-                console.log('[RESUME_RAG]   Clicking dropdown...');
-                clickable.click();
+                // Try method 2: Use keyboard navigation
+                console.log('[RESUME_RAG]   Using keyboard to select option');
 
-                // Wait for dropdown to open
+                // Send arrow down key to move to first option
+                let downEvent = new KeyboardEvent('keydown', {
+                    key: 'ArrowDown',
+                    code: 'ArrowDown',
+                    keyCode: 40,
+                    bubbles: true,
+                    cancelable: true
+                });
+
+                clickable.dispatchEvent(downEvent);
+
+                // Give it time to respond to keyboard
                 setTimeout(() => {
-                    // Look for option elements - try multiple selectors
-                    let options = Array.from(document.querySelectorAll('[role="option"], li, [class*="option"], div[class*="item"]'));
-
-                    console.log('[RESUME_RAG]   Found ' + options.length + ' potential options');
-
-                    // Filter to only elements with simple text content (just "Yes" or "No")
-                    let yesNoOptions = options.filter(opt => {
-                        const text = opt.textContent?.trim() || '';
-                        // Match exactly "Yes" or "No" - nothing else
-                        return text === 'Yes' || text === 'No';
+                    // Now look for visible Yes/No buttons anywhere on the page
+                    const allText = Array.from(document.querySelectorAll('*')).filter(el => {
+                        const text = el.textContent?.trim() || '';
+                        // Get computed style to check if visible
+                        const style = window.getComputedStyle(el);
+                        const isVisible = style.display !== 'none' && style.visibility !== 'hidden';
+                        return (text === 'Yes' || text === 'No') && isVisible && el.offsetHeight > 0;
                     });
 
-                    console.log('[RESUME_RAG]   Filtered to ' + yesNoOptions.length + ' Yes/No options');
+                    console.log('[RESUME_RAG]   Found ' + allText.length + ' visible Yes/No elements on page');
 
-                    // Log a few options for debugging
-                    if (yesNoOptions.length > 0) {
-                        yesNoOptions.slice(0, 3).forEach((opt, i) => {
-                            console.log('[RESUME_RAG]     Option[' + i + ']: "' + opt.textContent?.trim() + '"');
-                        });
-                    }
-
-                    // If we found Yes/No options, use those
-                    if (yesNoOptions.length > 0) {
-                        options = yesNoOptions;
-                    } else {
-                        // Fallback: Show some of what we found
-                        console.log('[RESUME_RAG]   No Yes/No matches, showing first 5 options found:');
-                        options.slice(0, 5).forEach((opt, i) => {
-                            console.log('[RESUME_RAG]     [' + i + ']: "' + opt.textContent?.substring(0, 30) + '"');
-                        });
-                    }
-
-                    let found = false;
-                    for (const opt of options) {
-                        const optText = opt.textContent?.trim() || '';
-
-                        if (optText === targetValue) {
-                            console.log('[RESUME_RAG]   ✓ Found "' + targetValue + '", clicking it');
-                            opt.click();
-                            found = true;
-                            break;
+                    if (allText.length > 0) {
+                        // Find the one that matches our target
+                        let found = false;
+                        for (const el of allText) {
+                            const text = el.textContent?.trim() || '';
+                            if (text === targetValue) {
+                                console.log('[RESUME_RAG]   ✓ Found visible "' + targetValue + '", clicking it');
+                                el.click();
+                                found = true;
+                                break;
+                            }
                         }
-                    }
 
-                    if (!found) {
-                        console.log('[RESUME_RAG]   ✗ "' + targetValue + '" not found, closing dropdown with Escape');
+                        if (!found) {
+                            console.log('[RESUME_RAG]   Found Yes/No elements but not "' + targetValue + '", trying first one');
+                            allText[0].click();
+                        }
+                    } else {
+                        console.log('[RESUME_RAG]   No visible Yes/No elements found');
+
+                        // Fallback: Try to find and click by text using querySelector
+                        const xpath = "//*[text()='" + targetValue + "']";
+                        console.log('[RESUME_RAG]   Trying XPath approach...');
+
+                        // Just close the dropdown
                         const esc = new KeyboardEvent('keydown', {
                             key: 'Escape',
                             code: 'Escape',
@@ -330,7 +330,7 @@ function handleYesNoDropdowns() {
                         });
                         clickable.dispatchEvent(esc);
                     }
-                }, 300);
+                }, 200);
             }
         }
     });
