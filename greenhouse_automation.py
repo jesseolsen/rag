@@ -257,31 +257,66 @@ class GreenhouseAutomation:
 
         # Second pass: Handle dropdown selects (Yes/No questions)
         logger.info("\nHandling dropdown questions...")
-        selects = await self.page.query_selector_all('select')
-        logger.info(f"Found {len(selects)} select elements")
 
-        for select in selects:
+        # Scroll down to trigger rendering of select elements
+        await self.page.evaluate("window.scrollBy(0, 3000)")
+        await asyncio.sleep(1)
+
+        # These are custom dropdown components, not native selects
+        # Find all the dropdown buttons by their parent labels
+        dropdown_mappings = [
+            {'label_text': 'Have you ever worked for Coalition before', 'target': 'No'},
+            {'label_text': 'authorized to lawfully work', 'target': 'Yes'},
+            {'label_text': 'visa sponsorship', 'target': 'No'},
+            {'label_text': 'acknowledge', 'target': 'Yes'},
+        ]
+
+        for mapping in dropdown_mappings:
             try:
-                # Get parent label/legend text
-                label_text = await select.evaluate(
-                    "el => el.closest('fieldset')?.querySelector('legend, label')?.textContent || ''"
-                )
+                label_text = mapping['label_text']
+                target = mapping['target']
 
-                if label_text:
-                    logger.info(f"Select field: {label_text[:50]}")
+                logger.info(f"Looking for dropdown: {label_text}")
 
-                    # Try to find and select "Yes" option
-                    options = await select.query_selector_all('option')
-                    for option in options:
-                        text = await option.text_content()
-                        if text and 'yes' in text.lower():
-                            value = await option.get_attribute('value')
-                            await select.select_option(value)
+                # Find the fieldset or div containing this question
+                selector = f"text={label_text}"
+                element = await self.page.query_selector(f"*:has-text('{label_text}')")
+
+                if element:
+                    # Find the dropdown button/div after this element
+                    dropdown_button = await self.page.evaluate(f'''
+                        () => {{
+                            const elements = Array.from(document.querySelectorAll('*'));
+                            const idx = elements.findIndex(el => el.textContent.includes('{label_text}'));
+                            if (idx >= 0) {{
+                                // Look for next dropdown-like element
+                                for (let i = idx; i < elements.length; i++) {{
+                                    if (elements[i].textContent.includes('Select')) {{
+                                        return elements[i];
+                                    }}
+                                }}
+                            }}
+                            return null;
+                        }}
+                    ''')
+
+                    if dropdown_button:
+                        logger.info(f"  Found dropdown for: {label_text}")
+                        # Click it
+                        await element.click()
+                        await asyncio.sleep(0.5)
+
+                        # Find and click the target option
+                        option_selector = f"text=^{target}$"
+                        try:
+                            await self.page.click(f"button:has-text('{target}'), div:has-text('{target}')", timeout=3000)
                             counts['dropdowns'] += 1
-                            logger.info(f"  ✓ Selected 'Yes'")
-                            break
+                            logger.info(f"  ✓ Selected '{target}'")
+                        except:
+                            logger.debug(f"  Could not find option '{target}'")
+
             except Exception as e:
-                logger.debug(f"Could not handle select: {e}")
+                logger.debug(f"Could not handle dropdown: {e}")
 
         return counts
 
@@ -307,19 +342,40 @@ async def main():
     parser.add_argument('--url', required=True, help='Greenhouse job form URL')
     parser.add_argument('--resume-data', help='JSON string with resume data')
     parser.add_argument('--resume-file', help='Path to JSON file with resume data')
+    parser.add_argument('--backend-url', default='http://localhost:8000', help='Backend API URL')
+    parser.add_argument('--resume-id', help='Resume ID from backend (uses latest if not specified)')
     parser.add_argument('--headless', action='store_true', help='Run in headless mode')
     parser.add_argument('--slow-mo', type=int, default=100, help='Slow down by N ms')
     parser.add_argument('--screenshot', help='Save screenshot to file')
 
     args = parser.parse_args()
 
-    # Load resume data
+    # Load resume data - prefer backend API
     resume_data = {}
-    if args.resume_data:
-        resume_data = json.loads(args.resume_data)
-    elif args.resume_file:
-        with open(args.resume_file) as f:
-            resume_data = json.load(f)
+    if args.backend_url:
+        try:
+            import requests
+            endpoint = f"{args.backend_url}/api/v1/resume/{args.resume_id}/data" if args.resume_id else f"{args.backend_url}/api/v1/resume/latest/data"
+            logger.info(f"Fetching resume from: {endpoint}")
+            response = requests.get(endpoint, timeout=10)
+            if response.ok:
+                resume_data = response.json()
+                logger.info("✓ Loaded resume from backend")
+            else:
+                logger.warning(f"Backend returned {response.status_code}, falling back to file")
+        except Exception as e:
+            logger.warning(f"Could not fetch from backend: {e}, falling back to file")
+
+    # Fallback to file if backend didn't work
+    if not resume_data:
+        if args.resume_data:
+            resume_data = json.loads(args.resume_data)
+        elif args.resume_file:
+            with open(args.resume_file) as f:
+                resume_data = json.load(f)
+        else:
+            logger.error("No resume data provided. Use --backend-url, --resume-data, or --resume-file")
+            exit(1)
 
     # Run automation
     automation = GreenhouseAutomation(headless=args.headless, slow_mo=args.slow_mo)
