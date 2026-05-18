@@ -16,51 +16,53 @@ router = APIRouter(prefix="/api/v1/resume", tags=["resume"])
 
 async def process_resume_background(
     resume_id: uuid.UUID,
-    text_content: str,
-    db: AsyncSession
+    text_content: str
 ):
-    try:
-        # Detect sections
-        sections = detect_resume_sections(text_content)
+    from app.db import AsyncSessionLocal
 
-        # Chunk by section
-        chunks_data = chunk_resume_by_section(sections)
+    async with AsyncSessionLocal() as db:
+        try:
+            # Detect sections
+            sections = detect_resume_sections(text_content)
 
-        # Generate embeddings and save chunks
-        for section, chunks in chunks_data.items():
-            for chunk_index, chunk_text in enumerate(chunks):
+            # Chunk by section
+            chunks_list = chunk_resume_by_section(sections)
+
+            # Generate embeddings and save chunks
+            for chunk_data in chunks_list:
                 # Generate embedding
-                embedding = await generate_embeddings(chunk_text)
+                embedding = await generate_embeddings(chunk_data["content"])
 
                 # Create chunk record
                 chunk = ResumeSectionChunk(
-                    id=uuid.uuid4(),
-                    resume_id=resume_id,
-                    section=section,
-                    content=chunk_text,
+                    id=str(uuid.uuid4()),
+                    resume_id=str(resume_id),
+                    section=chunk_data["section"],
+                    content=chunk_data["content"],
                     embedding=embedding,
-                    chunk_index=chunk_index
+                    chunk_index=chunk_data["chunk_index"]
                 )
                 db.add(chunk)
 
-        # Update resume status
-        result = await db.execute(
-            select(Resume).where(Resume.id == resume_id)
-        )
-        resume = result.scalar_one()
-        resume.status = ResumeStatus.READY
-        resume.processed_at = datetime.utcnow()
+            # Update resume status
+            result = await db.execute(
+                select(Resume).where(Resume.id == resume_id)
+            )
+            resume = result.scalar_one()
+            resume.status = ResumeStatus.READY
+            resume.processed_at = datetime.utcnow()
 
-        await db.commit()
-    except Exception as e:
-        # Update status to failed
-        result = await db.execute(
-            select(Resume).where(Resume.id == resume_id)
-        )
-        resume = result.scalar_one()
-        resume.status = ResumeStatus.FAILED
-        resume.resume_metadata = {"error": str(e)}
-        await db.commit()
+            await db.commit()
+        except Exception as e:
+            # Update status to failed
+            async with AsyncSessionLocal() as db2:
+                result = await db2.execute(
+                    select(Resume).where(Resume.id == resume_id)
+                )
+                resume = result.scalar_one()
+                resume.status = ResumeStatus.FAILED
+                resume.resume_metadata = {"error": str(e)}
+                await db2.commit()
 
 
 @router.post("/upload", response_model=ResumeUploadResponse)
@@ -93,12 +95,12 @@ async def upload_resume(
         )
 
     # Create resume record
-    resume_id = uuid.uuid4()
+    resume_id = str(uuid.uuid4())
     resume = Resume(
         id=resume_id,
         filename=file.filename,
         content_type=file.content_type,
-        file_content=content,
+        file_content=bytes(content),
         status=ResumeStatus.PROCESSING,
         resume_metadata=metadata
     )
@@ -112,8 +114,7 @@ async def upload_resume(
         background_tasks.add_task(
             process_resume_background,
             resume_id,
-            text_content,
-            db
+            text_content
         )
 
     return ResumeUploadResponse(
@@ -131,8 +132,9 @@ async def get_resume_status(
     db: AsyncSession = Depends(get_db)
 ):
     """Get resume processing status."""
+    resume_id_str = str(resume_id)
     result = await db.execute(
-        select(Resume).where(Resume.id == resume_id)
+        select(Resume).where(Resume.id == resume_id_str)
     )
     resume = result.scalar_one_or_none()
 
@@ -141,7 +143,7 @@ async def get_resume_status(
 
     # Count chunks
     chunks_result = await db.execute(
-        select(ResumeSectionChunk).where(ResumeSectionChunk.resume_id == resume_id)
+        select(ResumeSectionChunk).where(ResumeSectionChunk.resume_id == resume_id_str)
     )
     chunk_count = len(chunks_result.scalars().all())
 

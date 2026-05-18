@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resume RAG - AI Job Application Assistant</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+        }
+
+        .card h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+        }
+
+        .upload-area {
+            border: 2px dashed #667eea;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .upload-area:hover {
+            background: #f8f9ff;
+            border-color: #764ba2;
+        }
+
+        .upload-area.dragover {
+            background: #f0f4ff;
+            border-color: #764ba2;
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-group textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status {
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .result {
+            background: #f8f9ff;
+            border: 1px solid #e0e7ff;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+            white-space: pre-wrap;
+            line-height: 1.6;
+        }
+
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #e0e0e0;
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.3s;
+        }
+
+        .tab:hover {
+            color: #667eea;
+        }
+
+        .tab.active {
+            border-bottom-color: #667eea;
+            color: #667eea;
+            font-weight: 500;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .resume-info {
+            background: #e8f5e9;
+            border: 1px solid #c8e6c9;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 20px;
+        }
+
+        .resume-info h3 {
+            color: #2e7d32;
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📄 Resume RAG</h1>
+            <p>AI-Powered Job Application Assistant</p>
+        </div>
+
+        <div class="card">
+            <div class="tabs">
+                <div class="tab active" data-tab="upload">Upload Resume</div>
+                <div class="tab" data-tab="response">Generate Response</div>
+                <div class="tab" data-tab="cover-letter">Cover Letter</div>
+            </div>
+
+            <div id="upload" class="tab-content active">
+                <h2>Upload Your Resume</h2>
+                <div class="upload-area" id="dropZone">
+                    <div class="upload-icon">📁</div>
+                    <p>Drag and drop your resume here, or click to select</p>
+                    <p style="font-size: 0.9rem; color: #666; margin-top: 8px;">Supports PDF files</p>
+                    <input type="file" id="fileInput" accept=".pdf" style="display: none;">
+                </div>
+                <div id="uploadStatus" class="status"></div>
+                <div id="resumeInfo" class="resume-info" style="display: none;"></div>
+            </div>
+
+            <div id="response" class="tab-content">
+                <h2>Generate Job Application Response</h2>
+                <div id="resumeInfo2" class="resume-info" style="display: none;"></div>
+                <div class="form-group">
+                    <label for="prompt">Application Question</label>
+                    <textarea id="prompt" placeholder="e.g., Tell us about your experience with distributed systems..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="jobContext">Job Context (optional)</label>
+                    <input type="text" id="jobContext" placeholder="e.g., Senior Backend Engineer at Tech Company">
+                </div>
+                <div class="form-group">
+                    <label for="tone">Tone</label>
+                    <select id="tone">
+                        <option value="professional">Professional</option>
+                        <option value="casual">Casual</option>
+                        <option value="enthusiastic">Enthusiastic</option>
+                    </select>
+                </div>
+                <button class="btn" id="generateResponse" onclick="generateResponse()">Generate Response</button>
+                <div id="responseStatus" class="status"></div>
+                <div id="responseResult" class="result" style="display: none;"></div>
+            </div>
+
+            <div id="cover-letter" class="tab-content">
+                <h2>Generate Cover Letter</h2>
+                <div id="resumeInfo3" class="resume-info" style="display: none;"></div>
+                <div class="form-group">
+                    <label for="jobTitle">Job Title</label>
+                    <input type="text" id="jobTitle" placeholder="e.g., Senior Backend Engineer">
+                </div>
+                <div class="form-group">
+                    <label for="company">Company</label>
+                    <input type="text" id="company" placeholder="e.g., Tech Company">
+                </div>
+                <div class="form-group">
+                    <label for="jobDescription">Job Description</label>
+                    <textarea id="jobDescription" placeholder="Paste the job description here..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="requirements">Key Requirements (comma-separated)</label>
+                    <input type="text" id="requirements" placeholder="e.g., Python, PostgreSQL, Docker">
+                </div>
+                <button class="btn" id="generateCoverLetter" onclick="generateCoverLetter()">Generate Cover Letter</button>
+                <div id="coverLetterStatus" class="status"></div>
+                <div id="coverLetterResult" class="result" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentResumeId = null;
+        let currentFilename = null;
+
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById(tab.dataset.tab).classList.add('active');
+            });
+        });
+
+        // File upload
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length) {
+                uploadFile(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) {
+                uploadFile(e.target.files[0]);
+            }
+        });
+
+        async function uploadFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const status = document.getElementById('uploadStatus');
+            status.style.display = 'block';
+            status.className = 'status info';
+            status.innerHTML = '<span class="loading"></span>Uploading and processing resume...';
+
+            try {
+                const response = await fetch('/api/v1/resume/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    currentResumeId = data.resume_id;
+                    currentFilename = data.filename;
+                    
+                    status.className = 'status success';
+                    status.innerHTML = `✓ Resume uploaded successfully! Status: ${data.status}`;
+                    
+                    // Show resume info in all tabs
+                    const resumeInfo = `
+                        <h3>Current Resume</h3>
+                        <p><strong>File:</strong> ${data.filename}</p>
+                        <p><strong>Status:</strong> ${data.status}</p>
+                        <p><strong>Uploaded:</strong> ${new Date(data.uploaded_at).toLocaleString()}</p>
+                    `;
+                    document.getElementById('resumeInfo').innerHTML = resumeInfo;
+                    document.getElementById('resumeInfo').style.display = 'block';
+                    document.getElementById('resumeInfo2').innerHTML = resumeInfo;
+                    document.getElementById('resumeInfo2').style.display = 'block';
+                    document.getElementById('resumeInfo3').innerHTML = resumeInfo;
+                    document.getElementById('resumeInfo3').style.display = 'block';
+
+                    // Poll for processing status
+                    if (data.status === 'processing') {
+                        pollResumeStatus(data.resume_id);
+                    }
+                } else {
+                    status.className = 'status error';
+                    status.innerHTML = `✗ Error: ${data.detail || 'Upload failed'}`;
+                }
+            } catch (error) {
+                status.className = 'status error';
+                status.innerHTML = `✗ Error: ${error.message}`;
+            }
+        }
+
+        async function pollResumeStatus(resumeId) {
+            const status = document.getElementById('uploadStatus');
+
+            const interval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/api/v1/resume/${resumeId}`);
+
+                    if (!response.ok) {
+                        return;
+                    }
+
+                    const data = await response.json();
+
+                    if (data.status === 'ready') {
+                        clearInterval(interval);
+                        status.className = 'status success';
+                        status.innerHTML = `✓ Resume processed successfully! Ready to use.`;
+
+                        const resumeInfo = `
+                            <h3>Current Resume</h3>
+                            <p><strong>File:</strong> ${data.filename}</p>
+                            <p><strong>Status:</strong> ${data.status}</p>
+                            <p><strong>Chunks:</strong> ${data.chunks}</p>
+                            <p><strong>Uploaded:</strong> ${new Date(data.uploaded_at).toLocaleString()}</p>
+                        `;
+                        document.getElementById('resumeInfo').innerHTML = resumeInfo;
+                        document.getElementById('resumeInfo2').innerHTML = resumeInfo;
+                        document.getElementById('resumeInfo3').innerHTML = resumeInfo;
+                    } else if (data.status === 'failed') {
+                        clearInterval(interval);
+                        status.className = 'status error';
+                        status.innerHTML = `✗ Resume processing failed`;
+                    }
+                } catch (error) {
+                    clearInterval(interval);
+                }
+            }, 2000);
+        }
+
+        async function generateResponse() {
+            if (!currentResumeId) {
+                alert('Please upload a resume first');
+                return;
+            }
+
+            const prompt = document.getElementById('prompt').value;
+            const jobContext = document.getElementById('jobContext').value;
+            const tone = document.getElementById('tone').value;
+
+            if (!prompt) {
+                alert('Please enter a question');
+                return;
+            }
+
+            const status = document.getElementById('responseStatus');
+            const result = document.getElementById('responseResult');
+            
+            status.style.display = 'block';
+            status.className = 'status info';
+            status.innerHTML = '<span class="loading"></span>Generating response...';
+            result.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/v1/generate/response', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt, job_context: jobContext, tone })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    status.className = 'status success';
+                    status.innerHTML = '✓ Response generated successfully!';
+                    result.textContent = data.response;
+                    result.style.display = 'block';
+                } else {
+                    status.className = 'status error';
+                    status.innerHTML = `✗ Error: ${data.detail || 'Generation failed'}`;
+                }
+            } catch (error) {
+                status.className = 'status error';
+                status.innerHTML = `✗ Error: ${error.message}`;
+            }
+        }
+
+        async function generateCoverLetter() {
+            if (!currentResumeId) {
+                alert('Please upload a resume first');
+                return;
+            }
+
+            const jobTitle = document.getElementById('jobTitle').value;
+            const company = document.getElementById('company').value;
+            const jobDescription = document.getElementById('jobDescription').value;
+            const requirements = document.getElementById('requirements').value;
+
+            if (!jobTitle || !company || !jobDescription) {
+                alert('Please fill in job title, company, and job description');
+                return;
+            }
+
+            const status = document.getElementById('coverLetterStatus');
+            const result = document.getElementById('coverLetterResult');
+            
+            status.style.display = 'block';
+            status.className = 'status info';
+            status.innerHTML = '<span class="loading"></span>Generating cover letter...';
+            result.style.display = 'none';
+
+            try {
+                const specificRequirements = requirements ? requirements.split(',').map(r => r.trim()) : [];
+                
+                const response = await fetch('/api/v1/generate/cover-letter', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        job_title: jobTitle,
+                        company,
+                        job_description: jobDescription,
+                        specific_requirements: specificRequirements
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    status.className = 'status success';
+                    status.innerHTML = '✓ Cover letter generated successfully!';
+                    result.textContent = data.cover_letter;
+                    result.style.display = 'block';
+                } else {
+                    status.className = 'status error';
+                    status.innerHTML = `✗ Error: ${data.detail || 'Generation failed'}`;
+                }
+            } catch (error) {
+                status.className = 'status error';
+                status.innerHTML = `✗ Error: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>
