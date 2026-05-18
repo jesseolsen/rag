@@ -79,6 +79,8 @@ class ResumeDataResponse(BaseModel):
     location: Optional[str] = None
     city: Optional[str] = None
     state: Optional[str] = None
+    linkedin: Optional[str] = None
+    website: Optional[str] = None
     summary: Optional[str] = None
     experience: list = []
     education: list = []

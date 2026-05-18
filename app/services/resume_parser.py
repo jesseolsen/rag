@@ -3,7 +3,7 @@ from typing import Dict, List, Any
 
 
 def extract_contact_info(text: str) -> Dict[str, str]:
-    """Extract name, email, phone, and location from resume text."""
+    """Extract name, email, phone, location, and URLs from resume text."""
     info = {}
 
     # Extract email
@@ -56,6 +56,22 @@ def extract_contact_info(text: str) -> Dict[str, str]:
         else:
             info['first_name'] = full_name
             info['last_name'] = ''
+
+    # Extract LinkedIn URL
+    linkedin_pattern = r'linkedin\.com/in/[\w\-]+'
+    linkedin_match = re.search(linkedin_pattern, text)
+    if linkedin_match:
+        info['linkedin'] = 'https://' + linkedin_match.group()
+
+    # Extract website/portfolio URLs (not email, not linkedin)
+    url_pattern = r'https?://(?!linkedin\.com)[\w\-\.]+\.\w+(?:/[\w\-]*)?'
+    url_matches = re.findall(url_pattern, text)
+    if url_matches:
+        # Filter out common non-portfolio URLs
+        for url in url_matches:
+            if not any(x in url.lower() for x in ['github.com', 'twitter.com', 'facebook.com', 'instagram.com']):
+                info['website'] = url
+                break
 
     return info
 
