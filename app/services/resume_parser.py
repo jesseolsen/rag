@@ -51,7 +51,8 @@ def extract_contact_info(text: str) -> Dict[str, str]:
         name_parts = full_name.split()
         if len(name_parts) >= 2:
             info['first_name'] = name_parts[0]
-            info['last_name'] = ' '.join(name_parts[1:])
+            # Last name is typically the last part, not all middle+last names
+            info['last_name'] = name_parts[-1]
         else:
             info['first_name'] = full_name
             info['last_name'] = ''
