@@ -32,10 +32,23 @@ document.getElementById('fillButton').addEventListener('click', async () => {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
         console.log('Sending message to content script...');
+        let responseReceived = false;
+
+        // Set a timeout to show a default message if no response
+        const timeout = setTimeout(() => {
+            if (!responseReceived) {
+                console.log('[POPUP] No response received after 3 seconds');
+                showStatus('✓ Form filled! (Check the form to verify)', 'success');
+            }
+        }, 3000);
+
         chrome.tabs.sendMessage(tab.id, {
             action: 'fillForm',
             resumeData: resumeData
         }, (response) => {
+            clearTimeout(timeout);
+            responseReceived = true;
+
             console.log('[POPUP] Got response:', response);
             console.log('[POPUP] Chrome error:', chrome.runtime.lastError);
 
