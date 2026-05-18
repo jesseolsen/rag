@@ -242,6 +242,7 @@
                 <div class="tab active" data-tab="upload">Upload Resume</div>
                 <div class="tab" data-tab="response">Generate Response</div>
                 <div class="tab" data-tab="cover-letter">Cover Letter</div>
+                <div class="tab" data-tab="bookmarklet">Form Filler</div>
             </div>
 
             <div id="upload" class="tab-content active">
@@ -302,6 +303,51 @@
                 <button class="btn" id="generateCoverLetter" onclick="generateCoverLetter()">Generate Cover Letter</button>
                 <div id="coverLetterStatus" class="status"></div>
                 <div id="coverLetterResult" class="result" style="display: none;"></div>
+            </div>
+
+            <div id="bookmarklet" class="tab-content">
+                <h2>Form Filler Bookmarklet</h2>
+                <p>This bookmarklet automatically fills job application forms with your resume data. Just drag the button below to your bookmarks bar.</p>
+
+                <div class="form-group">
+                    <label>Installation</label>
+                    <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                        <p><strong>Step 1:</strong> Drag this button to your bookmarks bar:</p>
+                        <a href="javascript:(function(){const script=document.createElement('script');script.src='http://localhost:8000/static/form-filler.js';document.body.appendChild(script);})();"
+                           style="display: inline-block; background: #667eea; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold; cursor: pointer;">📋 Fill Job Form</a>
+                        <p style="margin-top: 15px;"><strong>Step 2:</strong> When on a job application page, click the bookmarklet. It will prompt for your resume ID on first use.</p>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>How it works</label>
+                    <p>The bookmarklet:</p>
+                    <ul style="margin-left: 20px;">
+                        <li>Detects form fields on the page</li>
+                        <li>Matches fields to your resume data (name, email, phone, etc.)</li>
+                        <li>Automatically fills matching fields</li>
+                        <li>Highlights filled fields in yellow</li>
+                    </ul>
+                </div>
+
+                <div class="form-group">
+                    <label>Your Resume ID</label>
+                    <div id="resumeIdDisplay" style="background: #f5f5f5; padding: 15px; border-radius: 6px; font-family: monospace; word-break: break-all;">
+                        Upload a resume to see your ID
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Troubleshooting</label>
+                    <details>
+                        <summary>The bookmarklet doesn't work on some sites</summary>
+                        <p style="margin-top: 10px;">Some job sites use iframes or complex JavaScript frameworks that prevent automatic form filling. For these sites, the bookmarklet may not be able to access all fields. You can manually copy values from your resume.</p>
+                    </details>
+                    <details>
+                        <summary>How do I switch resumes?</summary>
+                        <p style="margin-top: 10px;">Run this in your browser console: <code style="background: #f5f5f5; padding: 2px 6px; border-radius: 3px;">localStorage.removeItem('job_app_resume_id')</code></p>
+                    </details>
+                </div>
             </div>
         </div>
     </div>
@@ -387,6 +433,9 @@
                     document.getElementById('resumeInfo2').style.display = 'block';
                     document.getElementById('resumeInfo3').innerHTML = resumeInfo;
                     document.getElementById('resumeInfo3').style.display = 'block';
+
+                    // Update resume ID display in bookmarklet tab
+                    document.getElementById('resumeIdDisplay').textContent = data.resume_id;
 
                     // Poll for processing status
                     if (data.status === 'processing') {

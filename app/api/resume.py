@@ -6,10 +6,11 @@ from datetime import datetime
 
 from app.db import get_db
 from app.models.database import Resume, ResumeSectionChunk, ResumeStatus
-from app.models.schemas import ResumeUploadResponse
+from app.models.schemas import ResumeUploadResponse, ResumeDataResponse
 from app.services.resume_processor import extract_text_from_pdf, detect_resume_sections
 from app.services.chunking import chunk_resume_by_section
 from app.services.embeddings import generate_embeddings
+from app.services.resume_parser import extract_contact_info, extract_summary, extract_skills, extract_experience, extract_education
 
 router = APIRouter(prefix="/api/v1/resume", tags=["resume"])
 
@@ -153,4 +154,56 @@ async def get_resume_status(
         status=resume.status,
         chunks=chunk_count,
         uploaded_at=resume.uploaded_at
+    )
+
+
+@router.get("/{resume_id}/data")
+async def get_resume_data(
+    resume_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get structured resume data for form filling."""
+    resume_id_str = str(resume_id)
+    result = await db.execute(
+        select(Resume).where(Resume.id == resume_id_str)
+    )
+    resume = result.scalar_one_or_none()
+
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+
+    if resume.status != ResumeStatus.READY:
+        raise HTTPException(status_code=400, detail="Resume processing not complete")
+
+    # Extract text from file content
+    if resume.filename.lower().endswith('.pdf'):
+        try:
+            text_content, _ = extract_text_from_pdf(resume.file_content)
+        except:
+            raise HTTPException(status_code=500, detail="Failed to extract resume text")
+    else:
+        text_content = resume.file_content.decode('utf-8')
+
+    # Parse resume sections
+    sections = detect_resume_sections(text_content)
+
+    # Extract structured data
+    contact_info = extract_contact_info(text_content)
+    summary = extract_summary(text_content)
+    skills = extract_skills(sections)
+    experience = extract_experience(text_content)
+    education = extract_education(text_content)
+
+    return ResumeDataResponse(
+        resume_id=resume.id,
+        filename=resume.filename,
+        status=resume.status.value,
+        name=contact_info.get('name'),
+        email=contact_info.get('email'),
+        phone=contact_info.get('phone'),
+        location=contact_info.get('location'),
+        summary=summary,
+        experience=experience,
+        education=education,
+        skills=skills
     )

@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from datetime import datetime
 from uuid import UUID
 import enum
+from typing import Optional
 
 
 class ResumeStatus(str, enum.Enum):
@@ -64,3 +65,18 @@ class SearchSkillsResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
+
+
+class ResumeDataResponse(BaseModel):
+    resume_id: str
+    filename: str
+    status: str
+    name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    location: Optional[str] = None
+    summary: Optional[str] = None
+    experience: list = []
+    education: list = []
+    skills: list = []
+    projects: list = []
