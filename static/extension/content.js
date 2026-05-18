@@ -1,106 +1,104 @@
-// Simple test - log immediately to see if script loads
-console.log('[RESUME_RAG] Content script executing');
-window.RESUME_RAG_LOADED = true;
+// Resume RAG Form Filler
+console.log('[RESUME_RAG] Content script loaded');
 
-// Listen for messages
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    console.log('[RESUME_RAG] Message received:', request);
+    console.log('[RESUME_RAG] Message received:', request.action);
 
     if (request.action === 'fillForm') {
-        console.log('[RESUME_RAG] Starting fill with:', Object.keys(request.resumeData));
+        // Wait a moment for page to fully load (especially iframes)
+        setTimeout(() => {
+            const result = fillForm(request.resumeData);
+            console.log('[RESUME_RAG] Final result:', result);
+            sendResponse(result);
+        }, 1000);
 
-        const result = fillForm(request.resumeData);
-        console.log('[RESUME_RAG] Fill result:', result);
-
-        sendResponse(result);
+        return true; // Keep channel open for async response
     }
 });
 
 function fillForm(resumeData) {
-    console.log('[RESUME_RAG] fillForm called');
+    console.log('[RESUME_RAG] Starting form fill');
+
+    const data = {
+        first: resumeData.first_name || '',
+        last: resumeData.last_name || '',
+        email: resumeData.email || '',
+        phone: resumeData.phone || '',
+        city: resumeData.city || '',
+        linkedin: resumeData.linkedin || '',
+        website: resumeData.website || ''
+    };
 
     let filledCount = 0;
 
-    // Get resume values
-    const first = resumeData.first_name || '';
-    const last = resumeData.last_name || '';
-    const email = resumeData.email || '';
-    const phone = resumeData.phone || '';
-    const city = resumeData.city || '';
-    const linkedin = resumeData.linkedin || '';
-    const website = resumeData.website || '';
+    // Get all input elements from main page AND iframes
+    const getAllInputs = () => {
+        let inputs = [];
 
-    console.log('[RESUME_RAG] Resume data:', { first, last, email, phone });
+        // Main page inputs
+        inputs = inputs.concat(Array.from(document.querySelectorAll('input, select, textarea')));
 
-    // Find ALL inputs on the page
-    const allInputs = document.querySelectorAll('input, select, textarea');
-    console.log('[RESUME_RAG] Total form elements found:', allInputs.length);
+        // Inputs from iframes
+        try {
+            document.querySelectorAll('iframe').forEach(iframe => {
+                try {
+                    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+                    if (iframeDoc) {
+                        inputs = inputs.concat(Array.from(iframeDoc.querySelectorAll('input, select, textarea')));
+                    }
+                } catch (e) {
+                    // Cross-origin iframe
+                }
+            });
+        } catch (e) {}
+
+        return inputs;
+    };
+
+    const inputs = getAllInputs();
+    console.log('[RESUME_RAG] Total form elements:', inputs.length);
 
     // Process each input
-    allInputs.forEach((field, idx) => {
-        if (!field.offsetHeight) return; // Skip hidden
+    inputs.forEach((field) => {
+        if (!field.offsetHeight) return; // Skip hidden fields
 
-        const type = field.type?.toLowerCase() || 'unknown';
+        const type = field.type?.toLowerCase() || '';
         const id = field.id?.toLowerCase() || '';
         const name = field.name?.toLowerCase() || '';
         const placeholder = field.placeholder?.toLowerCase() || '';
 
-        // Get label text
+        // Get label
         let label = '';
-        if (field.id) {
-            const lbl = field.ownerDocument.querySelector(`label[for="${field.id}"]`);
-            if (lbl) label = lbl.textContent?.toLowerCase() || '';
-        }
+        try {
+            const doc = field.ownerDocument;
+            if (field.id) {
+                const lbl = doc.querySelector(`label[for="${field.id}"]`);
+                if (lbl) label = lbl.textContent?.toLowerCase() || '';
+            }
+        } catch (e) {}
 
-        const allText = `${id}|${name}|${placeholder}|${label}`;
+        const context = `${id}|${name}|${placeholder}|${label}`;
 
-        // HANDLE CHECKBOXES
+        // CHECKBOXES
         if (type === 'checkbox') {
-            if (/linkedin/.test(allText)) {
-                console.log('[RESUME_RAG] Found LinkedIn checkbox');
+            if (/linkedin/.test(context)) {
+                console.log('[RESUME_RAG] Checking LinkedIn checkbox');
                 field.checked = true;
                 field.dispatchEvent(new Event('change', { bubbles: true }));
+                field.dispatchEvent(new Event('click', { bubbles: true }));
                 filledCount++;
             }
             return;
         }
 
-        // HANDLE TEXT INPUTS
-        if (type === 'text' || type === '' || type === 'email' || type === 'tel') {
-            let value = null;
-
-            if (/last.?name|lname|surname/i.test(allText)) value = last;
-            else if (/first.?name|fname/i.test(allText)) value = first;
-            else if (/email/i.test(allText)) value = email;
-            else if (/phone|telephone|mobile|cell/i.test(allText)) value = phone;
-            else if (/city/i.test(allText) && !/address/i.test(allText)) value = city;
-            else if (/linkedin/i.test(allText)) value = linkedin;
-            else if (/website|portfolio|url/i.test(allText)) value = website;
-
-            if (value) {
-                console.log('[RESUME_RAG] Filling:', allText.substring(0, 30), 'with:', value.substring(0, 20));
-                field.value = value;
-                field.dispatchEvent(new Event('input', { bubbles: true }));
-                field.dispatchEvent(new Event('change', { bubbles: true }));
-
-                // Highlight
-                const orig = field.style.backgroundColor;
-                field.style.backgroundColor = '#ffffcc';
-                setTimeout(() => { field.style.backgroundColor = orig; }, 1500);
-
-                filledCount++;
-            }
-        }
-
-        // HANDLE SELECT
+        // SELECTS - Handle country/work authorization dropdowns
         if (type === 'select-one' || field.tagName === 'SELECT') {
-            if (/country|authorized|work.*in|visa|legal|sponsorship/i.test(allText)) {
-                console.log('[RESUME_RAG] Found select for:', allText.substring(0, 40));
+            if (/country|authorized|legal|visa|sponsorship/i.test(context)) {
+                console.log('[RESUME_RAG] Processing country select:', name);
 
-                // Find USA option
                 for (const opt of field.options || []) {
-                    if (/usa|united states|america/i.test(opt.text)) {
-                        console.log('[RESUME_RAG] Setting select to:', opt.text);
+                    if (/^usa$|^us$|united states|america/i.test(opt.text.trim())) {
+                        console.log('[RESUME_RAG] Setting to:', opt.text);
                         field.value = opt.value;
                         field.dispatchEvent(new Event('change', { bubbles: true }));
                         filledCount++;
@@ -108,13 +106,52 @@ function fillForm(resumeData) {
                     }
                 }
             }
+            return;
+        }
+
+        // TEXT INPUTS
+        if (type === 'text' || type === '' || type === 'email' || type === 'tel' || field.tagName === 'TEXTAREA') {
+            let value = null;
+
+            if (/last.?name|lname|surname/i.test(context)) {
+                value = data.last;
+            } else if (/first.?name|fname/i.test(context)) {
+                value = data.first;
+            } else if (/^email/i.test(context)) {
+                value = data.email;
+            } else if (/phone|telephone|mobile|cell/i.test(context)) {
+                value = data.phone;
+            } else if (/^city|location_city/i.test(context) && !/address|zip|postal/i.test(context)) {
+                value = data.city;
+            } else if (/linkedin/i.test(context)) {
+                value = data.linkedin;
+            } else if (/website|portfolio|url/i.test(context)) {
+                value = data.website;
+            }
+
+            if (value) {
+                try {
+                    field.value = value;
+                    field.dispatchEvent(new Event('input', { bubbles: true }));
+                    field.dispatchEvent(new Event('change', { bubbles: true }));
+                    field.dispatchEvent(new Event('blur', { bubbles: true }));
+
+                    // Yellow highlight
+                    const oldBg = field.style.backgroundColor;
+                    field.style.backgroundColor = '#ffffcc';
+                    setTimeout(() => {
+                        field.style.backgroundColor = oldBg;
+                    }, 1500);
+
+                    filledCount++;
+                    console.log('[RESUME_RAG] Filled:', name || id, 'with:', value.substring(0, 30));
+                } catch (e) {
+                    console.log('[RESUME_RAG] Error filling field:', e);
+                }
+            }
         }
     });
 
-    console.log('[RESUME_RAG] Filled count:', filledCount);
-
-    return {
-        success: true,
-        filledCount: filledCount
-    };
+    console.log('[RESUME_RAG] Total filled:', filledCount);
+    return { success: true, filledCount };
 }
