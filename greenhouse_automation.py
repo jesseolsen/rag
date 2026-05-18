@@ -255,43 +255,58 @@ class GreenhouseAutomation:
                     except Exception as e:
                         logger.debug(f"✗ Error checking checkbox: {e}")
 
-        # Second pass: Handle dropdown selects using simple click + keyboard
+        # Second pass: Handle dropdown selects using the actual input element
         logger.info("\nHandling dropdown questions...")
 
-        # Find all Select... buttons and process them one by one
         try:
-            # Get all Select... text elements (these are the dropdown triggers)
-            select_buttons = await self.page.query_selector_all('text="Select..."')
-            logger.info(f"Found {len(select_buttons)} 'Select...' buttons")
+            # Find all combobox inputs (these are the actual select controls)
+            # These Yes/No dropdowns come AFTER the "How did you hear about us?" section
+            # We look for inputs that appear after we scroll past the initial questions
+            inputs = await self.page.query_selector_all('input[role="combobox"]')
+            logger.info(f"Found {len(inputs)} total combobox inputs")
 
-            for i, button in enumerate(select_buttons[:4]):  # Limit to first 4 (the Yes/No ones)
+            # Filter for the ones that have Yes/No options (skip the first ones like country selector)
+            # They appear near labels containing Coalition or visa questions
+            yes_no_inputs = []
+            for inp in inputs:
+                try:
+                    field_id = await inp.get_attribute('id') or ''
+                    if field_id and 'question' in field_id.lower():
+                        yes_no_inputs.append(inp)
+                except:
+                    pass
+
+            logger.info(f"Found {len(yes_no_inputs)} Yes/No dropdowns")
+
+            # Process the first 4 Yes/No dropdowns
+            for i, input_elem in enumerate(yes_no_inputs[:4]):
                 try:
                     logger.info(f"Dropdown {i + 1}: Processing...")
 
-                    # Scroll this button into view
-                    await button.scroll_into_view_if_needed()
+                    # Scroll into view
+                    await input_elem.scroll_into_view_if_needed()
                     await asyncio.sleep(0.3)
 
-                    # Click the button
-                    logger.info(f"  Clicking Select...")
-                    await button.click()
+                    # Click the input to open dropdown
+                    logger.info(f"  Clicking input...")
+                    await input_elem.click()
                     await asyncio.sleep(0.5)
 
                     # Press ArrowDown to highlight first option
                     logger.info(f"  Pressing ArrowDown...")
                     await self.page.keyboard.press('ArrowDown')
-                    await asyncio.sleep(0.3)
+                    await asyncio.sleep(0.2)
 
                     # Press Enter to select
                     logger.info(f"  Pressing Enter...")
                     await self.page.keyboard.press('Enter')
-                    await asyncio.sleep(0.5)
+                    await asyncio.sleep(0.3)
 
                     counts['dropdowns'] += 1
                     logger.info(f"  ✓ Dropdown {i + 1} selected")
 
                 except Exception as e:
-                    logger.debug(f"Dropdown {i + 1} error: {e}")
+                    logger.info(f"Dropdown {i + 1} error: {type(e).__name__}: {e}")
                     continue
 
             logger.info(f"Completed {counts['dropdowns']} dropdowns")
