@@ -17,32 +17,34 @@ async function testGreenhouseAPI() {
     // Step 1: Detect Greenhouse instance
     console.log('Step 1: Detecting Greenhouse instance...');
     const url = window.location.href;
-    let domain = null;
+    let baseUrl = null;
+    let company = null;
     let jobId = null;
 
     if (url.includes('job-boards.greenhouse.io')) {
         const params = new URL(url).searchParams;
-        const company = params.get('for');
+        company = params.get('for');
         jobId = params.get('jr_id');
-        domain = `${company}.greenhouse.io`;
+        baseUrl = 'https://job-boards.greenhouse.io/api/v4';
         console.log(`✓ Detected job-boards subdomain`);
         console.log(`  Company: ${company}`);
         console.log(`  Job ID: ${jobId}`);
+        console.log(`  API: ${baseUrl}`);
     } else if (url.includes('.greenhouse.io')) {
         const match = url.match(/https?:\/\/([^.]+)\.greenhouse\.io/);
         if (match) {
-            domain = match[1] + '.greenhouse.io';
-            console.log(`✓ Detected company subdomain: ${domain}`);
+            company = match[1];
+            baseUrl = `https://${company}.greenhouse.io/api/v4`;
+            console.log(`✓ Detected company subdomain: ${company}`);
+            console.log(`  API: ${baseUrl}`);
         }
     }
 
-    if (!domain) {
+    if (!baseUrl) {
         console.log('✗ Could not detect Greenhouse instance');
         console.log('  Make sure you\'re on a Greenhouse job form URL');
         return;
     }
-
-    const baseUrl = `https://${domain}/api/v4`;
 
     // Step 2: Test API accessibility
     console.log('\nStep 2: Testing API accessibility...');
@@ -69,6 +71,9 @@ async function testGreenhouseAPI() {
     console.log('\nStep 3: Fetching job details with questions...');
     try {
         let questionsUrl = `${baseUrl}/jobs?questions=true`;
+        if (company) {
+            questionsUrl += `&for=${company}`;
+        }
         if (jobId) {
             questionsUrl += `&job_id=${jobId}`;
         }

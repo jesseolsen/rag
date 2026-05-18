@@ -21,28 +21,34 @@ class GreenhouseAPI {
      */
     detectGreenhouseInstance() {
         const url = window.location.href;
-        let domain = null;
 
-        // Check if it's a job-boards subdomain
+        // Check if it's a job-boards subdomain (embedded job boards)
         if (url.includes('job-boards.greenhouse.io')) {
             const params = new URL(url).searchParams;
             const company = params.get('for'); // e.g., 'coalition'
             this.boardToken = params.get('token');
             this.jobId = params.get('jr_id');
-            domain = `${company}.greenhouse.io`;
+
+            if (company && this.jobId) {
+                // For job-boards, the API is at job-boards.greenhouse.io/api/v4
+                this.baseUrl = 'https://job-boards.greenhouse.io/api/v4';
+                this.company = company;
+                console.log('[GREENHOUSE_API] Detected job-boards subdomain');
+                console.log('[GREENHOUSE_API] Company:', company);
+                console.log('[GREENHOUSE_API] Job ID:', this.jobId);
+                return true;
+            }
         }
         // Check if it's a company.greenhouse.io domain
         else if (url.includes('.greenhouse.io')) {
             const match = url.match(/https?:\/\/([^.]+)\.greenhouse\.io/);
             if (match) {
-                domain = match[1] + '.greenhouse.io';
+                const company = match[1];
+                this.baseUrl = `https://${company}.greenhouse.io/api/v4`;
+                this.company = company;
+                console.log('[GREENHOUSE_API] Detected company subdomain:', company);
+                return true;
             }
-        }
-
-        if (domain) {
-            this.baseUrl = `https://${domain}/api/v4`;
-            console.log('[GREENHOUSE_API] Detected instance:', domain);
-            return true;
         }
 
         console.log('[GREENHOUSE_API] Could not detect Greenhouse instance');
@@ -60,7 +66,15 @@ class GreenhouseAPI {
         }
 
         try {
-            const url = `${this.baseUrl}/jobs?job_id=${this.jobId}&questions=true`;
+            // For job-boards, use ?for=company parameter; for company domains use ?job_id
+            let url = `${this.baseUrl}/jobs?questions=true`;
+            if (this.company) {
+                url += `&for=${this.company}`;
+            }
+            if (this.jobId) {
+                url += `&job_id=${this.jobId}`;
+            }
+
             console.log('[GREENHOUSE_API] Fetching questions from:', url);
 
             const response = await fetch(url, {
@@ -128,6 +142,7 @@ class GreenhouseAPI {
      */
     buildApplicationPayload(resumeData, answers = {}) {
         const payload = {
+            job_id: this.jobId,
             first_name: resumeData.first_name || '',
             last_name: resumeData.last_name || '',
             email: resumeData.email || '',
