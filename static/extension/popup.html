@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            width: 350px;
+            padding: 15px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            margin: 0;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        h1 {
+            margin: 0 0 15px 0;
+            font-size: 18px;
+            color: #667eea;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            font-size: 13px;
+            color: #555;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 13px;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background: #764ba2;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+            text-align: center;
+            font-size: 12px;
+            display: none;
+        }
+        .status.success {
+            background: #c8e6c9;
+            color: #2e7d32;
+            display: block;
+        }
+        .status.error {
+            background: #ffcdd2;
+            color: #c62828;
+            display: block;
+        }
+        .status.info {
+            background: #bbdefb;
+            color: #1565c0;
+            display: block;
+        }
+        .info-box {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #666;
+            margin-top: 10px;
+            line-height: 1.4;
+        }
+        .backend-url {
+            font-size: 11px;
+            color: #999;
+            margin-top: 10px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📋 Resume RAG</h1>
+
+        <div class="form-group">
+            <label>Backend URL</label>
+            <input type="text" id="backendUrl" placeholder="http://localhost:8000" value="http://localhost:8000">
+        </div>
+
+        <div class="form-group">
+            <label>Resume ID (optional)</label>
+            <input type="text" id="resumeId" placeholder="Leave blank to use latest">
+        </div>
+
+        <button id="fillButton">Fill Form</button>
+
+        <div id="status" class="status"></div>
+
+        <div class="info-box">
+            ℹ️ This extension will fill all accessible text fields. Some dropdown fields may not be fillable due to Greenhouse's custom components.
+        </div>
+
+        <div class="backend-url">
+            Make sure your Resume RAG server is running
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>
