@@ -164,102 +164,92 @@ function fillForm(resumeData) {
         }
     });
 
-    // Handle Greenhouse custom dropdown components
-    console.log('[RESUME_RAG] Processing custom dropdowns');
-    handleCustomDropdowns();
+    // Handle Greenhouse custom Yes/No dropdown components
+    console.log('[RESUME_RAG] Processing custom Yes/No dropdowns');
+    handleYesNoDropdowns();
 
     console.log('[RESUME_RAG] Total filled:', filledCount);
     console.log('%cFORM FILLED: ' + filledCount + ' fields', 'font-size: 16px; color: green; font-weight: bold;');
     return { success: true, filledCount };
 }
 
-function handleCustomDropdowns() {
-    console.log('[RESUME_RAG] Looking for custom dropdown containers');
+function handleYesNoDropdowns() {
+    console.log('[RESUME_RAG] Looking for Yes/No dropdowns');
 
-    // Find all select containers (the parent divs of custom selects)
-    const selectContainers = document.querySelectorAll('.select-container, [class*="select-shell"]');
-    console.log('[RESUME_RAG] Found custom select containers:', selectContainers.length);
+    // Find all LABEL elements that contain Yes/No question text
+    const labels = Array.from(document.querySelectorAll('label'));
+    console.log('[RESUME_RAG] Found ' + labels.length + ' labels');
 
-    selectContainers.forEach((container, idx) => {
-        // Get the label/context for this dropdown
-        let context = '';
+    labels.forEach((label, idx) => {
+        const labelText = label.textContent?.toLowerCase() || '';
 
-        // Look for associated label
-        const label = container.previousElementSibling;
-        if (label && label.tagName === 'LABEL') {
-            context = label.textContent?.toLowerCase() || '';
-        }
-
-        // Or check parent for label
-        if (!context && container.parentElement) {
-            const parentLabel = container.parentElement.querySelector('label');
-            if (parentLabel) {
-                context = parentLabel.textContent?.toLowerCase() || '';
-            }
-        }
-
-        console.log('[RESUME_RAG] Dropdown[' + idx + '] context: "' + context.substring(0, 60) + '"');
-
-        // Determine what value to select based on the question
+        // Check if this label is for a Yes/No question
         let targetValue = null;
 
-        // Questions that should be answered "No"
-        if (/have you ever worked|worked.*before|prior.*experience/i.test(context)) {
+        if (/have you ever worked|worked.*before|prior.*experience/i.test(labelText)) {
             targetValue = 'No';
-            console.log('[RESUME_RAG] -> Prior experience question, will select: No');
-        }
-        // Questions that should be answered "Yes"
-        else if (/authorized|legal.*work|right.*work|eligib|acknowledge|agree|privacy|processing/i.test(context)) {
+            console.log('[RESUME_RAG] Label[' + idx + ']: Prior experience question -> will select: No');
+        } else if (/authorized|legal.*work|right.*work|eligib/i.test(labelText)) {
             targetValue = 'Yes';
-            console.log('[RESUME_RAG] -> Compliance/authorization question, will select: Yes');
-        }
-        // Visa sponsorship questions - answer "No" (not required)
-        else if (/visa|sponsor|require.*employ|h-?1|h-?1?b/i.test(context)) {
+            console.log('[RESUME_RAG] Label[' + idx + ']: Work authorization question -> will select: Yes');
+        } else if (/visa|sponsor|require.*employ|h-?1|h-?1?b/i.test(labelText)) {
             targetValue = 'No';
-            console.log('[RESUME_RAG] -> Visa question, will select: No');
+            console.log('[RESUME_RAG] Label[' + idx + ']: Visa question -> will select: No');
+        } else if (/acknowledge|agree|privacy|processing|data/i.test(labelText)) {
+            targetValue = 'Yes';
+            console.log('[RESUME_RAG] Label[' + idx + ']: Acknowledgement question -> will select: Yes');
         }
 
         if (targetValue) {
-            // Find the clickable element (usually the select-shell div)
-            const clickable = container.querySelector('[class*="select-shell"], select, button, [role="button"]');
+            // Find the next select-container after this label
+            let nextContainer = label.nextElementSibling;
 
-            if (clickable) {
-                console.log('[RESUME_RAG] Clicking dropdown[' + idx + '] to find: ' + targetValue);
-                clickable.click();
+            // If the label doesn't directly have a sibling container, search the parent
+            if (!nextContainer || !nextContainer.classList.contains('select-container')) {
+                const parent = label.closest('[class*="field"], .form-group, .form-field, div');
+                if (parent) {
+                    nextContainer = parent.querySelector('.select-container, [class*="select-shell"]');
+                }
+            }
 
-                // After a short delay, find and click the option
-                setTimeout(() => {
-                    // Look for dropdown options that appeared
-                    const options = document.querySelectorAll('[role="option"], [class*="option"], .gh-select-option, li');
-                    let found = false;
+            if (nextContainer) {
+                console.log('[RESUME_RAG] Found container for question, clicking...');
+                const clickable = nextContainer.querySelector('[class*="select-shell"], button, [role="button"]');
 
-                    console.log('[RESUME_RAG] Looking for "' + targetValue + '" among ' + options.length + ' options');
+                if (clickable) {
+                    clickable.click();
+                    console.log('[RESUME_RAG] Clicked, waiting for options...');
 
-                    for (const opt of options) {
-                        const optText = opt.textContent?.trim() || '';
-                        console.log('[RESUME_RAG]   Option: "' + optText + '"');
+                    // Wait for dropdown to open and find the option
+                    setTimeout(() => {
+                        const options = document.querySelectorAll('[role="option"], [class*="option"], li');
+                        console.log('[RESUME_RAG] Found ' + options.length + ' potential options');
 
-                        if (optText === targetValue || new RegExp('^' + targetValue + '$', 'i').test(optText)) {
-                            console.log('[RESUME_RAG] Found matching option, clicking: ' + optText);
-                            opt.click();
-                            found = true;
-                            break;
+                        let found = false;
+                        for (const opt of options) {
+                            const optText = opt.textContent?.trim() || '';
+                            if (optText === targetValue) {
+                                console.log('[RESUME_RAG] Found "' + targetValue + '", clicking it');
+                                opt.click();
+                                found = true;
+                                break;
+                            }
                         }
-                    }
 
-                    if (!found) {
-                        console.log('[RESUME_RAG] Option "' + targetValue + '" not found in dropdown');
-                        // Try to close the dropdown by pressing Escape
-                        const escapeEvent = new KeyboardEvent('keydown', {
-                            key: 'Escape',
-                            code: 'Escape',
-                            keyCode: 27,
-                            which: 27,
-                            bubbles: true
-                        });
-                        clickable.dispatchEvent(escapeEvent);
-                    }
-                }, 200);
+                        if (!found) {
+                            console.log('[RESUME_RAG] "' + targetValue + '" not found, closing dropdown');
+                            const esc = new KeyboardEvent('keydown', {
+                                key: 'Escape',
+                                code: 'Escape',
+                                keyCode: 27,
+                                bubbles: true
+                            });
+                            clickable.dispatchEvent(esc);
+                        }
+                    }, 250);
+                }
+            } else {
+                console.log('[RESUME_RAG] No container found after label');
             }
         }
     });
