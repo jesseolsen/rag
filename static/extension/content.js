@@ -1,14 +1,11 @@
 // Resume RAG Form Filler
 console.log('[RESUME_RAG] Content script loaded');
 
-let lastFilledCount = 0;
-
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     console.log('[RESUME_RAG] Message received:', request.action);
 
     if (request.action === 'fillForm') {
         const result = fillForm(request.resumeData);
-        lastFilledCount = Math.max(lastFilledCount, result.filledCount);
         console.log('[RESUME_RAG] Final result:', result);
         sendResponse(result);
     }
@@ -89,23 +86,15 @@ function fillForm(resumeData) {
             return;
         }
 
-        // SELECTS - Handle country/work authorization dropdowns
+        // NATIVE SELECTS
         if (type === 'select-one' || field.tagName === 'SELECT') {
-            console.log('[RESUME_RAG] Found SELECT - name:', name, 'context:', context.substring(0, 60));
+            console.log('[RESUME_RAG] Found native SELECT - name:', name);
 
             // Check if this looks like a country/work authorization field
             const isRelevant = /country|authorized|legal|visa|sponsorship|work.*in|require/i.test(context);
-            console.log('[RESUME_RAG] Is relevant select:', isRelevant);
 
             if (isRelevant) {
-                console.log('[RESUME_RAG] Processing select:', name, '- options count:', field.options?.length || 0);
-
-                // Log all options to debug
-                if (field.options) {
-                    for (let i = 0; i < Math.min(field.options.length, 5); i++) {
-                        console.log('[RESUME_RAG]   Option[' + i + ']:', field.options[i].text);
-                    }
-                }
+                console.log('[RESUME_RAG] Processing country select:', name);
 
                 for (const opt of field.options || []) {
                     if (/^usa$|^us$|united states|america/i.test(opt.text.trim())) {
@@ -163,6 +152,80 @@ function fillForm(resumeData) {
         }
     });
 
+    // Handle Greenhouse custom dropdown components
+    console.log('[RESUME_RAG] Processing custom dropdowns');
+    handleCustomDropdowns();
+
     console.log('[RESUME_RAG] Total filled:', filledCount);
     return { success: true, filledCount };
+}
+
+function handleCustomDropdowns() {
+    console.log('[RESUME_RAG] Looking for custom dropdown containers');
+
+    // Find all select containers (the parent divs of custom selects)
+    const selectContainers = document.querySelectorAll('.select-container, [class*="select-shell"]');
+    console.log('[RESUME_RAG] Found custom select containers:', selectContainers.length);
+
+    selectContainers.forEach((container, idx) => {
+        // Get the label/context for this dropdown
+        let context = '';
+
+        // Look for associated label
+        const label = container.previousElementSibling;
+        if (label && label.tagName === 'LABEL') {
+            context = label.textContent?.toLowerCase() || '';
+        }
+
+        // Or check parent for label
+        if (!context && container.parentElement) {
+            const parentLabel = container.parentElement.querySelector('label');
+            if (parentLabel) {
+                context = parentLabel.textContent?.toLowerCase() || '';
+            }
+        }
+
+        // Check if this is a country/authorization dropdown
+        if (/country|authorized|legal|visa|sponsorship|work.*in|require/i.test(context)) {
+            console.log('[RESUME_RAG] Custom dropdown[' + idx + '] context:', context.substring(0, 50));
+
+            // Find the clickable element (usually the select-shell div)
+            const clickable = container.querySelector('[class*="select-shell"], select, button, [role="button"]');
+
+            if (clickable) {
+                console.log('[RESUME_RAG] Clicking dropdown[' + idx + ']');
+                clickable.click();
+
+                // After a short delay, find and click the USA option
+                setTimeout(() => {
+                    // Look for dropdown options that appeared
+                    const options = document.querySelectorAll('[role="option"], [class*="option"], .gh-select-option, li');
+                    let found = false;
+
+                    for (const opt of options) {
+                        const optText = opt.textContent?.toLowerCase() || '';
+                        if (/^usa$|^us$|united states|america/i.test(optText)) {
+                            console.log('[RESUME_RAG] Found USA option, clicking:', optText);
+                            opt.click();
+                            found = true;
+                            break;
+                        }
+                    }
+
+                    if (!found) {
+                        console.log('[RESUME_RAG] USA option not found in dropdown');
+                        // Try to close the dropdown by pressing Escape
+                        const escapeEvent = new KeyboardEvent('keydown', {
+                            key: 'Escape',
+                            code: 'Escape',
+                            keyCode: 27,
+                            which: 27,
+                            bubbles: true
+                        });
+                        clickable.dispatchEvent(escapeEvent);
+                    }
+                }, 200);
+            }
+        }
+    });
 }
