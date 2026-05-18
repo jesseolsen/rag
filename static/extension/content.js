@@ -2,12 +2,14 @@
 console.log('[RESUME_RAG] Content script loaded');
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    console.log('[RESUME_RAG] Message received:', request.action);
+    console.log('[RESUME_RAG] Message received:', request.action, 'from:', sender.url);
 
     if (request.action === 'fillForm') {
         const result = fillForm(request.resumeData);
         console.log('[RESUME_RAG] Final result:', result);
+        console.log('[RESUME_RAG] Sending response back to popup');
         sendResponse(result);
+        console.log('[RESUME_RAG] Response sent');
     }
 });
 
@@ -203,8 +205,10 @@ function handleCustomDropdowns() {
                     let found = false;
 
                     for (const opt of options) {
-                        const optText = opt.textContent?.toLowerCase() || '';
-                        if (/^usa$|^us$|united states|america/i.test(optText)) {
+                        const optText = opt.textContent?.toLowerCase().trim() || '';
+                        // Match exactly "usa", "us", or "united states" - but not "american samoa"
+                        if (/^usa$|^us$|^united states$/.test(optText) ||
+                            /^usa\+|^us\+|^united states\+/.test(optText)) {
                             console.log('[RESUME_RAG] Found USA option, clicking:', optText);
                             opt.click();
                             found = true;
