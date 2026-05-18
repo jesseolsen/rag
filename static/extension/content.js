@@ -1,15 +1,25 @@
 // Resume RAG Form Filler
 console.log('[RESUME_RAG] Content script loaded');
 
+// Store last result globally for access from popup
+window.RESUME_RAG_LAST_RESULT = null;
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     console.log('[RESUME_RAG] Message received:', request.action, 'from:', sender.url);
 
     if (request.action === 'fillForm') {
         const result = fillForm(request.resumeData);
+        window.RESUME_RAG_LAST_RESULT = result;
         console.log('[RESUME_RAG] Final result:', result);
-        console.log('[RESUME_RAG] Sending response back to popup');
-        sendResponse(result);
-        console.log('[RESUME_RAG] Response sent');
+        console.log('[RESUME_RAG] Stored result globally');
+
+        // Send response synchronously
+        try {
+            sendResponse(result);
+            console.log('[RESUME_RAG] Response sent');
+        } catch (e) {
+            console.log('[RESUME_RAG] Error sending response:', e);
+        }
     }
 });
 
@@ -159,6 +169,7 @@ function fillForm(resumeData) {
     handleCustomDropdowns();
 
     console.log('[RESUME_RAG] Total filled:', filledCount);
+    console.log('%cFORM FILLED: ' + filledCount + ' fields', 'font-size: 16px; color: green; font-weight: bold;');
     return { success: true, filledCount };
 }
 
