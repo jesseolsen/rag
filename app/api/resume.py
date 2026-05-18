@@ -157,6 +157,56 @@ async def get_resume_status(
     )
 
 
+@router.get("/latest/data")
+async def get_latest_resume_data(
+    db: AsyncSession = Depends(get_db)
+):
+    """Get structured resume data for the most recently uploaded resume."""
+    result = await db.execute(
+        select(Resume).order_by(Resume.uploaded_at.desc()).limit(1)
+    )
+    resume = result.scalar_one_or_none()
+
+    if not resume:
+        raise HTTPException(status_code=404, detail="No resume found")
+
+    if resume.status != ResumeStatus.READY:
+        raise HTTPException(status_code=400, detail="Resume processing not complete")
+
+    # Extract text from file content
+    if resume.filename.lower().endswith('.pdf'):
+        try:
+            text_content, _ = extract_text_from_pdf(resume.file_content)
+        except:
+            raise HTTPException(status_code=500, detail="Failed to extract resume text")
+    else:
+        text_content = resume.file_content.decode('utf-8')
+
+    # Parse resume sections
+    sections = detect_resume_sections(text_content)
+
+    # Extract structured data
+    contact_info = extract_contact_info(text_content)
+    summary = extract_summary(text_content)
+    skills = extract_skills(sections)
+    experience = extract_experience(text_content)
+    education = extract_education(text_content)
+
+    return ResumeDataResponse(
+        resume_id=resume.id,
+        filename=resume.filename,
+        status=resume.status.value,
+        name=contact_info.get('name'),
+        email=contact_info.get('email'),
+        phone=contact_info.get('phone'),
+        location=contact_info.get('location'),
+        summary=summary,
+        experience=experience,
+        education=education,
+        skills=skills
+    )
+
+
 @router.get("/{resume_id}/data")
 async def get_resume_data(
     resume_id: uuid.UUID,
