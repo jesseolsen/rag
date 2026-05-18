@@ -18,21 +18,43 @@ def extract_contact_info(text: str) -> Dict[str, str]:
     if phone_match:
         info['phone'] = phone_match.group()
 
-    # Extract location (look for city, state pattern)
-    location_pattern = r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*,\s*[A-Z]{2}'
-    location_match = re.search(location_pattern, text)
-    if location_match:
-        info['location'] = location_match.group()
-
-    # Extract name (usually first line or before email)
+    # Extract location from first occurrence on a single line
     lines = text.split('\n')
+    for line in lines[:10]:
+        # Look for city, state ZIP pattern on a single line
+        location_pattern = r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*,\s*([A-Z]{2})'
+        location_match = re.search(location_pattern, line)
+        if location_match:
+            city = location_match.group(1).strip()
+            state = location_match.group(2).strip()
+            # Make sure this isn't just the name at the start
+            if city not in ['Dear', 'AI'] and len(city) < 30:
+                info['location'] = f"{city}, {state}"
+                info['city'] = city
+                info['state'] = state
+                break
+
+    # Extract name (usually first line that looks like a name)
+    full_name = None
     for line in lines[:5]:
         line = line.strip()
-        if line and len(line) < 80 and not any(char.isdigit() for char in line if len(line) > 20):
-            # Check if this looks like a name (words capitalized)
-            if re.match(r'^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*$', line):
-                info['name'] = line
+        # Must be 2-4 words, all capitalized, reasonably short
+        if line and 5 < len(line) < 50:
+            words = line.split()
+            if 1 < len(words) < 5 and all(re.match(r'^[A-Z][a-z]+$', w) for w in words):
+                full_name = line
                 break
+
+    if full_name:
+        info['name'] = full_name
+        # Split into first and last name
+        name_parts = full_name.split()
+        if len(name_parts) >= 2:
+            info['first_name'] = name_parts[0]
+            info['last_name'] = ' '.join(name_parts[1:])
+        else:
+            info['first_name'] = full_name
+            info['last_name'] = ''
 
     return info
 

@@ -72,9 +72,13 @@ class ResumeDataResponse(BaseModel):
     filename: str
     status: str
     name: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
     location: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
     summary: Optional[str] = None
     experience: list = []
     education: list = []
