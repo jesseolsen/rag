@@ -51,6 +51,9 @@ uploads/
 *.pdf
 *.txt
 
+# Screenshots (debugging artifacts)
+*.png
+
 # OS
 .DS_Store
 Thumbs.db
