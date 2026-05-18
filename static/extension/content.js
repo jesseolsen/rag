@@ -1,88 +1,17 @@
-// Try to fill Greenhouse dropdown components
-function tryFillGreenhouseDropdowns(filledCount) {
-    // Strategy 1: Look for native select elements in iframes and main document
-    const getAllSelects = () => {
-        let selects = Array.from(document.querySelectorAll('select'));
-
-        try {
-            document.querySelectorAll('iframe').forEach(iframe => {
-                try {
-                    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-                    if (iframeDoc) {
-                        selects = selects.concat(Array.from(iframeDoc.querySelectorAll('select')));
-                    }
-                } catch (e) {}
-            });
-        } catch (e) {}
-
-        return selects;
-    };
-
-    const selects = getAllSelects();
-    selects.forEach(select => {
-        const label = select.previousElementSibling?.textContent?.toLowerCase() ||
-                     select.parentElement?.textContent?.toLowerCase() || '';
-
-        // Handle country selects
-        if (/country|nation|authorized/.test(label)) {
-            for (const option of select.options) {
-                if (/usa|united states|america/i.test(option.textContent)) {
-                    select.value = option.value;
-                    select.dispatchEvent(new Event('change', { bubbles: true }));
-                    break;
-                }
-            }
-        }
-    });
-
-    // Strategy 2: Look for Greenhouse-style clickable dropdowns
-    const allElements = document.querySelectorAll('[role="button"], [role="combobox"], .gh-dropdown, .select-wrapper');
-
-    allElements.forEach(el => {
-        const text = el.textContent?.toLowerCase() || '';
-
-        // Try to find and fill country/state dropdowns with "USA"
-        if ((text.includes('country') || text.includes('authorized') ||
-             text.includes('select') && !text.includes('please')) &&
-            !el.querySelector('input[type=text]')) {
-
-            // This might be a dropdown trigger, try clicking it
-            try {
-                el.click();
-
-                // After click, wait and try to find "USA" option
-                setTimeout(() => {
-                    const options = document.querySelectorAll('[role=option], .gh-option, [data-value], li');
-                    let foundOption = null;
-
-                    for (const opt of options) {
-                        const optText = opt.textContent || '';
-                        if (/usa|united states|america/i.test(optText)) {
-                            foundOption = opt;
-                            break;
-                        }
-                    }
-
-                    if (foundOption) {
-                        foundOption.click();
-                    }
-                }, 150);
-            } catch (e) {
-                // Ignore click errors
-            }
-        }
-    });
-}
-
 // Content script - runs on every page
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'fillForm') {
+        console.log('fillForm action received');
         const result = fillFormFields(request.resumeData);
+        console.log('Sending response:', result);
         sendResponse(result);
     }
+    return true; // Keep channel open for async responses
 });
 
 function fillFormFields(resumeData) {
+    console.log('Starting form fill...');
+
     const data = {
         first_name: resumeData.first_name || '',
         last_name: resumeData.last_name || '',
@@ -98,200 +27,186 @@ function fillFormFields(resumeData) {
         summary: resumeData.summary || '',
         skills: (resumeData.skills || []).join(', '),
         experience: (resumeData.experience || []).map(e => e.title || '').join('\n'),
-        education: (resumeData.education || []).map(e => e.degree || '').join(', '),
-        hear_about_us: 'LinkedIn'
+        education: (resumeData.education || []).map(e => e.degree || '').join(', ')
     };
 
-    const patterns = [
-        ['last.?name|lname|surname|family.?name', 'last_name'],
-        ['first.?name|fname|given.?name', 'first_name'],
-        ['^name$|full.?name', 'name'],
-        ['email|e-mail|email.?address', 'email'],
-        ['phone|telephone|mobile|cell|contact.?number', 'phone'],
-        ['city|location.?city|birthplace', 'city'],
-        ['state|province|region|state.?province', 'state'],
-        ['country|nation|nationality', 'country'],
-        ['location|address|full.?address', 'location'],
-        ['linkedin|linkedin.?profile|linkedin.?url', 'linkedin'],
-        ['website|portfolio|url|personal.?website', 'website'],
-        ['summary|objective|about|bio|professional.?statement', 'summary'],
-        ['skills|expertise|competencies|technical', 'skills'],
-        ['experience|work.?history|employment|background', 'experience'],
-        ['education|degree|university|college|school', 'education']
-    ];
-
-    const filled = new Set();
     let filledCount = 0;
 
-    // Get all form fields (including those in iframes if possible)
-    const getAllInputs = () => {
-        let inputs = [];
+    // Get all inputs
+    const getInputs = () => {
+        let inputs = Array.from(document.querySelectorAll(
+            'input[type="text"], input:not([type]), textarea, select, input[type="checkbox"], input[type="radio"]'
+        ));
 
-        // Main page inputs (text, textareas, selects, checkboxes, radios)
-        inputs = inputs.concat(Array.from(document.querySelectorAll(
-            'input[type=text],input:not([type]),textarea,select,input[type=checkbox],input[type=radio]'
-        )));
-
-        // Try to access iframes
+        // Try to get inputs from iframes
         try {
             document.querySelectorAll('iframe').forEach(iframe => {
                 try {
                     const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
                     if (iframeDoc) {
                         inputs = inputs.concat(Array.from(iframeDoc.querySelectorAll(
-                            'input[type=text],input:not([type]),textarea,select,input[type=checkbox],input[type=radio]'
+                            'input[type="text"], input:not([type]), textarea, select, input[type="checkbox"], input[type="radio"]'
                         )));
-                    }
-                } catch (e) {
-                    // Cross-origin iframe, skip
-                }
-            });
-        } catch (e) {
-            // Ignore iframe access errors
-        }
-
-        return inputs;
-    };
-
-    const inputs = getAllInputs();
-
-    // Handle checkboxes for "How did you hear about us?" - check in iframes too
-    const getCheckboxes = () => {
-        let checkboxes = Array.from(document.querySelectorAll('input[type=checkbox]'));
-
-        try {
-            document.querySelectorAll('iframe').forEach(iframe => {
-                try {
-                    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-                    if (iframeDoc) {
-                        checkboxes = checkboxes.concat(Array.from(iframeDoc.querySelectorAll('input[type=checkbox]')));
                     }
                 } catch (e) {}
             });
         } catch (e) {}
 
-        return checkboxes;
+        return inputs;
     };
 
-    const checkboxes = getCheckboxes();
-    checkboxes.forEach(checkbox => {
-        const label = checkbox.parentElement?.textContent?.toLowerCase() || '';
-        const parentLabel = checkbox.parentElement?.parentElement?.textContent?.toLowerCase() || '';
-        const combinedLabel = `${label} ${parentLabel}`;
+    const inputs = getInputs();
+    console.log('Found inputs:', inputs.length);
 
-        if (/linkedin/.test(combinedLabel)) {
-            checkbox.checked = true;
-            checkbox.dispatchEvent(new Event('change', { bubbles: true }));
-            checkbox.dispatchEvent(new Event('click', { bubbles: true }));
-            checkbox.style.backgroundColor = '#ffffcc';
-            setTimeout(() => checkbox.style.backgroundColor = '', 2000);
-            filledCount++;
-        }
+    // Debug: log what inputs we found
+    inputs.forEach((f, i) => {
+        const type = f.type || 'unknown';
+        const id = f.id || 'no-id';
+        console.log(`  [${i}] type=${type} id=${id}`);
     });
 
-    // Try to handle Greenhouse dropdown components
-    tryFillGreenhouseDropdowns(filledCount);
-
+    // Process each input
     inputs.forEach(field => {
-        if (filled.has(field) || !field.offsetHeight) return;
+        if (!field.offsetHeight) return; // Skip hidden fields
 
-        // Get field context
-        const fieldId = (field.id || '').toLowerCase();
-        const fieldName = (field.name || '').toLowerCase();
-        const placeholder = (field.placeholder || '').toLowerCase();
-        const ariaLabel = (field.getAttribute('aria-label') || '').toLowerCase();
+        const fieldType = field.type?.toLowerCase() || '';
+        const fieldId = field.id?.toLowerCase() || '';
+        const fieldName = field.name?.toLowerCase() || '';
+        const placeholder = field.placeholder?.toLowerCase() || '';
 
-        // Get label text - check multiple sources
-        let label = '';
-
-        // Check for associated label
+        // Get label context
+        let labelText = '';
         if (field.id) {
-            const labels = field.ownerDocument.querySelectorAll(`label[for="${field.id}"]`);
-            if (labels.length > 0) {
-                label = labels[0].textContent.toLowerCase();
-            }
+            const lbl = field.ownerDocument.querySelectorAll(`label[for="${field.id}"]`);
+            if (lbl.length > 0) labelText = lbl[0].textContent.toLowerCase();
+        }
+        if (!labelText && field.parentElement) {
+            labelText = field.parentElement.textContent?.toLowerCase() || '';
         }
 
-        // Check parent element and siblings
-        if (!label) {
-            let parent = field.parentElement;
-            while (parent && !label && parent !== field.ownerDocument.body) {
-                const text = parent.textContent?.toLowerCase() || '';
-                if (text.length < 200) {
-                    label = text;
-                    break;
-                }
-                parent = parent.parentElement;
+        const context = `${fieldId} ${fieldName} ${placeholder} ${labelText}`;
+
+        // CHECKBOXES: Look for LinkedIn
+        if (fieldType === 'checkbox') {
+            if (/linkedin/i.test(labelText) || /linkedin/i.test(field.parentElement?.textContent || '')) {
+                console.log('Found LinkedIn checkbox, checking it');
+                field.checked = true;
+                field.dispatchEvent(new Event('change', { bubbles: true }));
+                field.dispatchEvent(new Event('click', { bubbles: true }));
+                filledCount++;
             }
+            return;
         }
 
-        // Check for label containing the field
-        if (!label) {
-            const fieldDoc = field.ownerDocument;
-            const labels = fieldDoc.querySelectorAll('label');
-            for (const l of labels) {
-                if (l.contains(field)) {
-                    label = l.textContent.toLowerCase();
-                    break;
-                }
-            }
-        }
+        // Skip radio buttons
+        if (fieldType === 'radio') return;
 
-        // Match against patterns
+        // TEXT FIELDS: Match patterns
         let value = null;
 
-        for (const [pattern, key] of patterns) {
-            const regexes = pattern.split('|').map(p => new RegExp(p, 'i'));
-            const matches = regexes.some(r =>
-                r.test(fieldId) ||
-                r.test(fieldName) ||
-                r.test(placeholder) ||
-                r.test(ariaLabel) ||
-                r.test(label)
-            );
-
-            if (matches) {
-                value = data[key];
-                break;
-            }
+        if (/last.?name|lname|surname/i.test(context)) {
+            value = data.last_name;
+        } else if (/first.?name|fname/i.test(context)) {
+            value = data.first_name;
+        } else if (/^name$|full.?name/i.test(context)) {
+            value = data.name;
+        } else if (/email/i.test(context)) {
+            value = data.email;
+        } else if (/phone|telephone|mobile|cell|contact/i.test(context)) {
+            value = data.phone;
+        } else if (/^city/i.test(context) && !/address/i.test(context)) {
+            value = data.city;
+        } else if (/state|province/i.test(context)) {
+            value = data.state;
+        } else if (/country/i.test(context)) {
+            value = data.country;
+        } else if (/location|address/i.test(context)) {
+            value = data.location;
+        } else if (/linkedin/i.test(context)) {
+            value = data.linkedin;
+        } else if (/website|portfolio|url/i.test(context)) {
+            value = data.website;
         }
 
-        // Fallback: semantic matching (more aggressive)
-        if (!value) {
-            const combinedContext = `${fieldId} ${fieldName} ${placeholder} ${ariaLabel} ${label}`;
-            if (/last.?name|surname|lname/.test(combinedContext)) value = data.last_name;
-            else if (/first.?name|fname|given/.test(combinedContext)) value = data.first_name;
-            else if (/email|e-mail/.test(combinedContext)) value = data.email;
-            else if (/phone|telephone|mobile|cell|contact/.test(combinedContext)) value = data.phone;
-            else if (/country|nation|nationality/.test(combinedContext)) value = data.country;
-            else if (/state|province|region/.test(combinedContext)) value = data.state;
-            else if (/linkedin/.test(combinedContext)) value = data.linkedin;
-            else if (/website|portfolio|url/.test(combinedContext)) value = data.website;
-            else if (/city|town|municipality/.test(combinedContext) && !/address|zip|postal/.test(combinedContext)) value = data.city;
-            else if (/location|address|street/.test(combinedContext)) value = data.location;
-            else if (/^name$|full.?name|fullname/.test(combinedContext)) value = data.first_name || data.name;
-        }
-
-        // Fill field
+        // Fill the field
         if (value && value.length > 0) {
             field.value = value;
             field.dispatchEvent(new Event('input', { bubbles: true }));
             field.dispatchEvent(new Event('change', { bubbles: true }));
             field.dispatchEvent(new Event('blur', { bubbles: true }));
 
-            // Visual feedback
+            // Highlight field
             field.style.backgroundColor = '#ffffcc';
-            setTimeout(() => {
-                field.style.backgroundColor = '';
-            }, 2000);
+            setTimeout(() => { field.style.backgroundColor = ''; }, 2000);
 
-            filled.add(field);
             filledCount++;
+            console.log('Filled field with:', value.substring(0, 40));
         }
     });
 
-    return {
-        success: true,
-        filledCount: filled.size + filledCount
-    };
+    // Handle SELECT dropdowns (for country/authorization)
+    let selectsMain = Array.from(document.querySelectorAll('select'));
+    let selectsFromIframes = [];
+
+    try {
+        document.querySelectorAll('iframe').forEach(iframe => {
+            try {
+                const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+                if (iframeDoc) {
+                    selectsFromIframes = selectsFromIframes.concat(Array.from(iframeDoc.querySelectorAll('select')));
+                }
+            } catch (e) {}
+        });
+    } catch (e) {}
+
+    const selects = selectsMain.concat(selectsFromIframes);
+    console.log('Found selects - main:', selectsMain.length, 'iframes:', selectsFromIframes.length);
+
+    selects.forEach((select, idx) => {
+        let selectLabel = '';
+
+        // Try to get label from associated label element
+        try {
+            if (select.id) {
+                const doc = select.ownerDocument;
+                const lbl = doc.querySelector(`label[for="${select.id}"]`);
+                if (lbl) selectLabel = lbl.textContent.toLowerCase();
+            }
+        } catch (e) {}
+
+        // Try parent element
+        if (!selectLabel && select.parentElement) {
+            selectLabel = select.parentElement.textContent?.toLowerCase() || '';
+        }
+
+        console.log(`Select[${idx}]: label="${selectLabel.substring(0, 50)}" options=${select.options.length}`);
+
+        // Check if it's a country/work authorization select
+        const matchCountry = /country|authorized|work.*in|legal.*work|visa|sponsorship|requirement/i.test(selectLabel);
+        if (matchCountry) {
+            console.log('  -> Found country/auth select!');
+
+            // Find and select USA option
+            let found = false;
+            for (let i = 0; i < select.options.length; i++) {
+                const opt = select.options[i];
+                console.log(`     Option[${i}]: "${opt.text}" (value="${opt.value}")`);
+                if (/usa|united states|america|^us$/i.test(opt.text)) {
+                    console.log(`  -> Selecting USA option: "${opt.text}"`);
+                    select.value = opt.value;
+                    select.dispatchEvent(new Event('change', { bubbles: true }));
+                    select.dispatchEvent(new Event('click', { bubbles: true }));
+                    filledCount++;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                console.log('  -> No USA option found');
+            }
+        }
+    });
+
+    console.log('Final filled count:', filledCount);
+    return { success: true, filledCount: filledCount };
 }
