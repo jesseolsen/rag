@@ -255,83 +255,49 @@ class GreenhouseAutomation:
                     except Exception as e:
                         logger.debug(f"✗ Error checking checkbox: {e}")
 
-        # Second pass: Handle dropdown selects using keyboard navigation
-        # Greenhouse dropdowns respond to: Tab to focus, ArrowDown to open/navigate, Return to select
+        # Second pass: Handle dropdown selects using simple click + keyboard
         logger.info("\nHandling dropdown questions...")
 
-        # Scroll down to ensure dropdowns are visible
-        await self.page.evaluate("window.scrollBy(0, 3000)")
-        await asyncio.sleep(1)
+        # Find all Select... buttons and process them one by one
+        try:
+            # Get all Select... text elements (these are the dropdown triggers)
+            select_buttons = await self.page.query_selector_all('text="Select..."')
+            logger.info(f"Found {len(select_buttons)} 'Select...' buttons")
 
-        # Map of questions to their target answers
-        dropdown_mappings = [
-            {'label_contains': 'Have you ever worked for Coalition before', 'target': 'No', 'arrow_count': 1},
-            {'label_contains': 'authorized to lawfully work', 'target': 'Yes', 'arrow_count': 0},
-            {'label_contains': 'visa sponsorship', 'target': 'No', 'arrow_count': 1},
-            {'label_contains': 'acknowledge', 'target': 'Yes', 'arrow_count': 0},
-        ]
+            for i, button in enumerate(select_buttons[:4]):  # Limit to first 4 (the Yes/No ones)
+                try:
+                    logger.info(f"Dropdown {i + 1}: Processing...")
 
-        for mapping in dropdown_mappings:
-            try:
-                label_contains = mapping['label_contains']
-                target = mapping['target']
-                arrow_count = mapping['arrow_count']
+                    # Scroll this button into view
+                    await button.scroll_into_view_if_needed()
+                    await asyncio.sleep(0.3)
 
-                logger.info(f"Finding dropdown for: {label_contains[:40]}")
-
-                # Find the "Select..." button/div for this question
-                # Look for element containing both the label text and "Select..."
-                selector_result = await self.page.evaluate(f'''
-                    () => {{
-                        const labels = Array.from(document.querySelectorAll('*'));
-                        for (const label of labels) {{
-                            if (label.textContent.includes('{label_contains}')) {{
-                                // Found the label, now find the Select... dropdown near it
-                                let parent = label.parentElement;
-                                while (parent && parent.tagName !== 'BODY') {{
-                                    const selects = parent.querySelectorAll('div, button');
-                                    for (const sel of selects) {{
-                                        if (sel.textContent.includes('Select...')) {{
-                                            return {{found: true, element: sel}};
-                                        }}
-                                    }}
-                                    parent = parent.parentElement;
-                                }}
-                            }}
-                        }}
-                        return {{found: false}};
-                    }}
-                ''')
-
-                if selector_result.get('found'):
-                    # Click on the "Select..." button to open the dropdown
-                    # Find the Select... element and click it
-                    try:
-                        # Find the dropdown near the label
-                        await self.page.click(f"text=/Select\\.\\.\\./ >> nth=0", timeout=5000)
-                        await asyncio.sleep(0.3)
-                    except:
-                        # Fallback: use keyboard tab
-                        await self.page.keyboard.press('Tab')
-                        await asyncio.sleep(0.3)
-
-                    logger.info(f"  Using keyboard: ArrowDown x{arrow_count + 1}, Return")
-
-                    # ArrowDown to navigate to the target option
-                    for i in range(arrow_count + 1):
-                        await self.page.keyboard.press('ArrowDown')
-                        await asyncio.sleep(0.2)
-
-                    # Return to select
-                    await self.page.keyboard.press('Enter')
-                    counts['dropdowns'] += 1
-                    logger.info(f"  ✓ Selected '{target}'")
+                    # Click the button
+                    logger.info(f"  Clicking Select...")
+                    await button.click()
                     await asyncio.sleep(0.5)
-                else:
-                    logger.debug(f"  Could not find dropdown for: {label_contains}")
 
-            except Exception as e:
-                logger.debug(f"Could not handle dropdown: {e}")
+                    # Press ArrowDown to highlight first option
+                    logger.info(f"  Pressing ArrowDown...")
+                    await self.page.keyboard.press('ArrowDown')
+                    await asyncio.sleep(0.3)
+
+                    # Press Enter to select
+                    logger.info(f"  Pressing Enter...")
+                    await self.page.keyboard.press('Enter')
+                    await asyncio.sleep(0.5)
+
+                    counts['dropdowns'] += 1
+                    logger.info(f"  ✓ Dropdown {i + 1} selected")
+
+                except Exception as e:
+                    logger.debug(f"Dropdown {i + 1} error: {e}")
+                    continue
+
+            logger.info(f"Completed {counts['dropdowns']} dropdowns")
+
+        except Exception as e:
+            logger.debug(f"Dropdown processing error: {e}")
 
         return counts
 
