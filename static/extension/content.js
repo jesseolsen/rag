@@ -176,80 +176,104 @@ function fillForm(resumeData) {
 function handleYesNoDropdowns() {
     console.log('[RESUME_RAG] Looking for Yes/No dropdowns');
 
-    // Find all LABEL elements that contain Yes/No question text
-    const labels = Array.from(document.querySelectorAll('label'));
-    console.log('[RESUME_RAG] Found ' + labels.length + ' labels');
+    // Find all div elements that have both a label and a select-container
+    const selectContainers = document.querySelectorAll('.select-container');
+    console.log('[RESUME_RAG] Found ' + selectContainers.length + ' select containers');
 
-    labels.forEach((label, idx) => {
-        const labelText = label.textContent?.toLowerCase() || '';
+    selectContainers.forEach((container, idx) => {
+        // Get the label for this container
+        let labelText = '';
 
-        // Check if this label is for a Yes/No question
+        // Method 1: Check previous sibling
+        let prevEl = container.previousElementSibling;
+        if (prevEl && prevEl.tagName === 'LABEL') {
+            labelText = prevEl.textContent?.toLowerCase() || '';
+        }
+
+        // Method 2: Check parent's label
+        if (!labelText) {
+            const parentLabel = container.parentElement?.querySelector('label');
+            if (parentLabel) {
+                labelText = parentLabel.textContent?.toLowerCase() || '';
+            }
+        }
+
+        // Method 3: Check siblings within parent
+        if (!labelText) {
+            const parent = container.parentElement;
+            if (parent) {
+                const label = parent.querySelector('label');
+                if (label) {
+                    labelText = label.textContent?.toLowerCase() || '';
+                }
+            }
+        }
+
+        console.log('[RESUME_RAG] Container[' + idx + ']: "' + labelText.substring(0, 60) + '"');
+
+        // Determine what value to select
         let targetValue = null;
 
         if (/have you ever worked|worked.*before|prior.*experience/i.test(labelText)) {
             targetValue = 'No';
-            console.log('[RESUME_RAG] Label[' + idx + ']: Prior experience question -> will select: No');
-        } else if (/authorized|legal.*work|right.*work|eligib/i.test(labelText)) {
+            console.log('[RESUME_RAG]   -> Prior experience question, select: No');
+        } else if (/authorized|legal.*work|right.*work|eligib|work.*country/i.test(labelText)) {
             targetValue = 'Yes';
-            console.log('[RESUME_RAG] Label[' + idx + ']: Work authorization question -> will select: Yes');
+            console.log('[RESUME_RAG]   -> Work authorization question, select: Yes');
         } else if (/visa|sponsor|require.*employ|h-?1|h-?1?b/i.test(labelText)) {
             targetValue = 'No';
-            console.log('[RESUME_RAG] Label[' + idx + ']: Visa question -> will select: No');
+            console.log('[RESUME_RAG]   -> Visa question, select: No');
         } else if (/acknowledge|agree|privacy|processing|data/i.test(labelText)) {
             targetValue = 'Yes';
-            console.log('[RESUME_RAG] Label[' + idx + ']: Acknowledgement question -> will select: Yes');
+            console.log('[RESUME_RAG]   -> Acknowledgement question, select: Yes');
+        } else if (/country|nation|location/i.test(labelText)) {
+            targetValue = 'United States';
+            console.log('[RESUME_RAG]   -> Country question, select: United States');
         }
 
         if (targetValue) {
-            // Find the next select-container after this label
-            let nextContainer = label.nextElementSibling;
+            const clickable = container.querySelector('[class*="select-shell"], button, [role="button"]');
 
-            // If the label doesn't directly have a sibling container, search the parent
-            if (!nextContainer || !nextContainer.classList.contains('select-container')) {
-                const parent = label.closest('[class*="field"], .form-group, .form-field, div');
-                if (parent) {
-                    nextContainer = parent.querySelector('.select-container, [class*="select-shell"]');
-                }
-            }
+            if (clickable) {
+                console.log('[RESUME_RAG]   Clicking dropdown...');
+                clickable.click();
 
-            if (nextContainer) {
-                console.log('[RESUME_RAG] Found container for question, clicking...');
-                const clickable = nextContainer.querySelector('[class*="select-shell"], button, [role="button"]');
+                // Wait for dropdown to open
+                setTimeout(() => {
+                    const options = document.querySelectorAll('[role="option"], [class*="option"], li');
+                    console.log('[RESUME_RAG]   Found ' + options.length + ' options, looking for "' + targetValue + '"');
 
-                if (clickable) {
-                    clickable.click();
-                    console.log('[RESUME_RAG] Clicked, waiting for options...');
+                    let found = false;
+                    for (const opt of options) {
+                        const optText = opt.textContent?.trim() || '';
 
-                    // Wait for dropdown to open and find the option
-                    setTimeout(() => {
-                        const options = document.querySelectorAll('[role="option"], [class*="option"], li');
-                        console.log('[RESUME_RAG] Found ' + options.length + ' potential options');
-
-                        let found = false;
-                        for (const opt of options) {
-                            const optText = opt.textContent?.trim() || '';
-                            if (optText === targetValue) {
-                                console.log('[RESUME_RAG] Found "' + targetValue + '", clicking it');
-                                opt.click();
-                                found = true;
-                                break;
-                            }
+                        // For country, match "United States +1"
+                        if (targetValue === 'United States' && /united states\s*\+/i.test(optText)) {
+                            console.log('[RESUME_RAG]   Found country option: ' + optText);
+                            opt.click();
+                            found = true;
+                            break;
                         }
-
-                        if (!found) {
-                            console.log('[RESUME_RAG] "' + targetValue + '" not found, closing dropdown');
-                            const esc = new KeyboardEvent('keydown', {
-                                key: 'Escape',
-                                code: 'Escape',
-                                keyCode: 27,
-                                bubbles: true
-                            });
-                            clickable.dispatchEvent(esc);
+                        // For Yes/No, exact match
+                        else if (optText === targetValue) {
+                            console.log('[RESUME_RAG]   Found option: ' + optText);
+                            opt.click();
+                            found = true;
+                            break;
                         }
-                    }, 250);
-                }
-            } else {
-                console.log('[RESUME_RAG] No container found after label');
+                    }
+
+                    if (!found) {
+                        console.log('[RESUME_RAG]   Option not found, closing dropdown');
+                        const esc = new KeyboardEvent('keydown', {
+                            key: 'Escape',
+                            code: 'Escape',
+                            keyCode: 27,
+                            bubbles: true
+                        });
+                        clickable.dispatchEvent(esc);
+                    }
+                }, 250);
             }
         }
     });
