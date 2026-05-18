@@ -255,65 +255,74 @@ class GreenhouseAutomation:
                     except Exception as e:
                         logger.debug(f"✗ Error checking checkbox: {e}")
 
-        # Second pass: Handle dropdown selects (Yes/No questions)
+        # Second pass: Handle dropdown selects using keyboard navigation
+        # Greenhouse dropdowns respond to: Tab to focus, ArrowDown to open/navigate, Return to select
         logger.info("\nHandling dropdown questions...")
 
-        # Scroll down to trigger rendering of select elements
+        # Scroll down to ensure dropdowns are visible
         await self.page.evaluate("window.scrollBy(0, 3000)")
         await asyncio.sleep(1)
 
-        # These are custom dropdown components, not native selects
-        # Find all the dropdown buttons by their parent labels
+        # Map of questions to their target answers
         dropdown_mappings = [
-            {'label_text': 'Have you ever worked for Coalition before', 'target': 'No'},
-            {'label_text': 'authorized to lawfully work', 'target': 'Yes'},
-            {'label_text': 'visa sponsorship', 'target': 'No'},
-            {'label_text': 'acknowledge', 'target': 'Yes'},
+            {'label_contains': 'Have you ever worked for Coalition before', 'target': 'No', 'arrow_count': 1},
+            {'label_contains': 'authorized to lawfully work', 'target': 'Yes', 'arrow_count': 0},
+            {'label_contains': 'visa sponsorship', 'target': 'No', 'arrow_count': 1},
+            {'label_contains': 'acknowledge', 'target': 'Yes', 'arrow_count': 0},
         ]
 
         for mapping in dropdown_mappings:
             try:
-                label_text = mapping['label_text']
+                label_contains = mapping['label_contains']
                 target = mapping['target']
+                arrow_count = mapping['arrow_count']
 
-                logger.info(f"Looking for dropdown: {label_text}")
+                logger.info(f"Finding dropdown for: {label_contains[:40]}")
 
-                # Find the fieldset or div containing this question
-                selector = f"text={label_text}"
-                element = await self.page.query_selector(f"*:has-text('{label_text}')")
-
-                if element:
-                    # Find the dropdown button/div after this element
-                    dropdown_button = await self.page.evaluate(f'''
-                        () => {{
-                            const elements = Array.from(document.querySelectorAll('*'));
-                            const idx = elements.findIndex(el => el.textContent.includes('{label_text}'));
-                            if (idx >= 0) {{
-                                // Look for next dropdown-like element
-                                for (let i = idx; i < elements.length; i++) {{
-                                    if (elements[i].textContent.includes('Select')) {{
-                                        return elements[i];
+                # Find the "Select..." button/div for this question
+                # Look for element containing both the label text and "Select..."
+                selector_result = await self.page.evaluate(f'''
+                    () => {{
+                        const labels = Array.from(document.querySelectorAll('*'));
+                        for (const label of labels) {{
+                            if (label.textContent.includes('{label_contains}')) {{
+                                // Found the label, now find the Select... dropdown near it
+                                let parent = label.parentElement;
+                                while (parent && parent.tagName !== 'BODY') {{
+                                    const selects = parent.querySelectorAll('div, button');
+                                    for (const sel of selects) {{
+                                        if (sel.textContent.includes('Select...')) {{
+                                            return {{found: true, element: sel}};
+                                        }}
                                     }}
+                                    parent = parent.parentElement;
                                 }}
                             }}
-                            return null;
                         }}
-                    ''')
+                        return {{found: false}};
+                    }}
+                ''')
 
-                    if dropdown_button:
-                        logger.info(f"  Found dropdown for: {label_text}")
-                        # Click it
-                        await element.click()
-                        await asyncio.sleep(0.5)
+                if selector_result.get('found'):
+                    # Use keyboard navigation
+                    logger.info(f"  Using keyboard: Tab, ArrowDown x{arrow_count + 1}, Return")
 
-                        # Find and click the target option
-                        option_selector = f"text=^{target}$"
-                        try:
-                            await self.page.click(f"button:has-text('{target}'), div:has-text('{target}')", timeout=3000)
-                            counts['dropdowns'] += 1
-                            logger.info(f"  ✓ Selected '{target}'")
-                        except:
-                            logger.debug(f"  Could not find option '{target}'")
+                    # Tab to focus the dropdown
+                    await self.page.keyboard.press('Tab')
+                    await asyncio.sleep(0.3)
+
+                    # ArrowDown to open and navigate
+                    for i in range(arrow_count + 1):
+                        await self.page.keyboard.press('ArrowDown')
+                        await asyncio.sleep(0.2)
+
+                    # Return to select
+                    await self.page.keyboard.press('Enter')
+                    counts['dropdowns'] += 1
+                    logger.info(f"  ✓ Selected '{target}'")
+                    await asyncio.sleep(0.5)
+                else:
+                    logger.debug(f"  Could not find dropdown for: {label_contains}")
 
             except Exception as e:
                 logger.debug(f"Could not handle dropdown: {e}")
