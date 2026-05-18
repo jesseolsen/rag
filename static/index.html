@@ -379,14 +379,25 @@
         let currentResumeId = null;
         let currentFilename = null;
 
-        // Tab switching
+        // Tab switching with persistence
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+            document.getElementById(tabName).classList.add('active');
+            localStorage.setItem('activeTab', tabName);
+        }
+
         document.querySelectorAll('.tab').forEach(tab => {
             tab.addEventListener('click', () => {
-                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-                tab.classList.add('active');
-                document.getElementById(tab.dataset.tab).classList.add('active');
+                switchTab(tab.dataset.tab);
             });
+        });
+
+        // Restore active tab on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedTab = localStorage.getItem('activeTab') || 'upload';
+            switchTab(savedTab);
         });
 
         // File upload
