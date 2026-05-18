@@ -206,6 +206,7 @@ class GreenhouseAutomation:
 
         logger.info(f"Total form elements: {len(inputs)}")
 
+        # First pass: Fill text fields and checkboxes
         for field in inputs:
             try:
                 field_type = await field.get_attribute('type')
@@ -253,6 +254,34 @@ class GreenhouseAutomation:
                         logger.info("✓ Checked LinkedIn checkbox")
                     except Exception as e:
                         logger.debug(f"✗ Error checking checkbox: {e}")
+
+        # Second pass: Handle dropdown selects (Yes/No questions)
+        logger.info("\nHandling dropdown questions...")
+        selects = await self.page.query_selector_all('select')
+        logger.info(f"Found {len(selects)} select elements")
+
+        for select in selects:
+            try:
+                # Get parent label/legend text
+                label_text = await select.evaluate(
+                    "el => el.closest('fieldset')?.querySelector('legend, label')?.textContent || ''"
+                )
+
+                if label_text:
+                    logger.info(f"Select field: {label_text[:50]}")
+
+                    # Try to find and select "Yes" option
+                    options = await select.query_selector_all('option')
+                    for option in options:
+                        text = await option.text_content()
+                        if text and 'yes' in text.lower():
+                            value = await option.get_attribute('value')
+                            await select.select_option(value)
+                            counts['dropdowns'] += 1
+                            logger.info(f"  ✓ Selected 'Yes'")
+                            break
+            except Exception as e:
+                logger.debug(f"Could not handle select: {e}")
 
         return counts
 
