@@ -304,14 +304,20 @@ class GreenhouseAutomation:
                 ''')
 
                 if selector_result.get('found'):
-                    # Use keyboard navigation
-                    logger.info(f"  Using keyboard: Tab, ArrowDown x{arrow_count + 1}, Return")
+                    # Click on the "Select..." button to open the dropdown
+                    # Find the Select... element and click it
+                    try:
+                        # Find the dropdown near the label
+                        await self.page.click(f"text=/Select\\.\\.\\./ >> nth=0", timeout=5000)
+                        await asyncio.sleep(0.3)
+                    except:
+                        # Fallback: use keyboard tab
+                        await self.page.keyboard.press('Tab')
+                        await asyncio.sleep(0.3)
 
-                    # Tab to focus the dropdown
-                    await self.page.keyboard.press('Tab')
-                    await asyncio.sleep(0.3)
+                    logger.info(f"  Using keyboard: ArrowDown x{arrow_count + 1}, Return")
 
-                    # ArrowDown to open and navigate
+                    # ArrowDown to navigate to the target option
                     for i in range(arrow_count + 1):
                         await self.page.keyboard.press('ArrowDown')
                         await asyncio.sleep(0.2)
