@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.models.schemas import HealthResponse
+from app.api import resume, generation, search
 
 app = FastAPI(
     title="Resume RAG",
@@ -16,6 +17,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include routers
+app.include_router(resume.router)
+app.include_router(generation.router)
+app.include_router(search.router)
 
 
 @app.get("/", response_model=HealthResponse)

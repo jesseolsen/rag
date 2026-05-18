@@ -1,6 +1,5 @@
-from anthropic import Anthropic
+from anthropic import AsyncAnthropic
 from app.config import settings
-import time
 
 
 class GenerationError(Exception):
@@ -26,16 +25,16 @@ RESPONSE_SYSTEM_PROMPT = """You are an expert at writing professional responses 
 - Professional in tone"""
 
 
-def generate_cover_letter(
-    resume_context: str,
+async def generate_cover_letter(
     job_title: str,
     company: str,
     job_description: str,
+    resume_context: str,
     specific_requirements: list[str] = None
-) -> dict:
+) -> str:
     """Generate a tailored cover letter using resume context."""
     try:
-        client = Anthropic(api_key=settings.anthropic_api_key)
+        client = AsyncAnthropic(api_key=settings.anthropic_api_key)
 
         requirements_text = ""
         if specific_requirements:
@@ -53,34 +52,28 @@ Job Description:
 Resume Context:
 {resume_context}"""
 
-        response = client.messages.create(
+        response = await client.messages.create(
             model=settings.generation_model,
             max_tokens=settings.max_generation_tokens,
             system=COVER_LETTER_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_prompt}]
         )
 
-        return {
-            "cover_letter": response.content[0].text,
-            "metadata": {
-                "tokens_used": response.usage.input_tokens + response.usage.output_tokens,
-                "model": settings.generation_model
-            }
-        }
+        return response.content[0].text
 
     except Exception as e:
         raise GenerationError(f"Failed to generate cover letter: {str(e)}")
 
 
-def generate_response(
-    resume_context: str,
+async def generate_response(
     prompt: str,
+    resume_context: str,
     job_context: str = "",
     tone: str = "professional"
-) -> dict:
+) -> str:
     """Generate a response to a job application question."""
     try:
-        client = Anthropic(api_key=settings.anthropic_api_key)
+        client = AsyncAnthropic(api_key=settings.anthropic_api_key)
 
         context_text = ""
         if job_context:
@@ -93,20 +86,14 @@ Resume Context:
 
 Write a professional response to the above question, using relevant details from the resume context."""
 
-        response = client.messages.create(
+        response = await client.messages.create(
             model=settings.generation_model,
             max_tokens=settings.max_generation_tokens,
             system=RESPONSE_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_prompt}]
         )
 
-        return {
-            "response": response.content[0].text,
-            "metadata": {
-                "tokens_used": response.usage.input_tokens + response.usage.output_tokens,
-                "model": settings.generation_model
-            }
-        }
+        return response.content[0].text
 
     except Exception as e:
         raise GenerationError(f"Failed to generate response: {str(e)}")
