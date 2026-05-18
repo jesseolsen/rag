@@ -198,29 +198,49 @@ function handleCustomDropdowns() {
             }
         }
 
-        // Check if this is a country/authorization dropdown
-        if (/country|authorized|legal|visa|sponsorship|work.*in|require/i.test(context)) {
-            console.log('[RESUME_RAG] Custom dropdown[' + idx + '] context:', context.substring(0, 50));
+        console.log('[RESUME_RAG] Dropdown[' + idx + '] context: "' + context.substring(0, 60) + '"');
 
+        // Determine what value to select based on the question
+        let targetValue = null;
+
+        // Questions that should be answered "No"
+        if (/have you ever worked|worked.*before|prior.*experience/i.test(context)) {
+            targetValue = 'No';
+            console.log('[RESUME_RAG] -> Prior experience question, will select: No');
+        }
+        // Questions that should be answered "Yes"
+        else if (/authorized|legal.*work|right.*work|eligib/i.test(context)) {
+            targetValue = 'Yes';
+            console.log('[RESUME_RAG] -> Work authorization question, will select: Yes');
+        }
+        // Visa sponsorship questions - answer "No" (not required)
+        else if (/visa|sponsor|require.*employ|h-?1|h-?1?b/i.test(context)) {
+            targetValue = 'No';
+            console.log('[RESUME_RAG] -> Visa question, will select: No');
+        }
+
+        if (targetValue) {
             // Find the clickable element (usually the select-shell div)
             const clickable = container.querySelector('[class*="select-shell"], select, button, [role="button"]');
 
             if (clickable) {
-                console.log('[RESUME_RAG] Clicking dropdown[' + idx + ']');
+                console.log('[RESUME_RAG] Clicking dropdown[' + idx + '] to find: ' + targetValue);
                 clickable.click();
 
-                // After a short delay, find and click the USA option
+                // After a short delay, find and click the option
                 setTimeout(() => {
                     // Look for dropdown options that appeared
                     const options = document.querySelectorAll('[role="option"], [class*="option"], .gh-select-option, li');
                     let found = false;
 
+                    console.log('[RESUME_RAG] Looking for "' + targetValue + '" among ' + options.length + ' options');
+
                     for (const opt of options) {
-                        const optText = opt.textContent?.toLowerCase().trim() || '';
-                        // Match exactly "usa", "us", or "united states" - but not "american samoa"
-                        if (/^usa$|^us$|^united states$/.test(optText) ||
-                            /^usa\+|^us\+|^united states\+/.test(optText)) {
-                            console.log('[RESUME_RAG] Found USA option, clicking:', optText);
+                        const optText = opt.textContent?.trim() || '';
+                        console.log('[RESUME_RAG]   Option: "' + optText + '"');
+
+                        if (optText === targetValue || new RegExp('^' + targetValue + '$', 'i').test(optText)) {
+                            console.log('[RESUME_RAG] Found matching option, clicking: ' + optText);
                             opt.click();
                             found = true;
                             break;
@@ -228,7 +248,7 @@ function handleCustomDropdowns() {
                     }
 
                     if (!found) {
-                        console.log('[RESUME_RAG] USA option not found in dropdown');
+                        console.log('[RESUME_RAG] Option "' + targetValue + '" not found in dropdown');
                         // Try to close the dropdown by pressing Escape
                         const escapeEvent = new KeyboardEvent('keydown', {
                             key: 'Escape',
