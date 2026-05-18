@@ -253,31 +253,58 @@ function handleYesNoDropdowns() {
         }
 
         if (targetValue) {
-            const clickable = container.querySelector('[class*="select-shell"], button, [role="button"]');
+            const clickable = container.querySelector('[class*="select-shell"], button, [role="button"], input, select');
 
             if (clickable) {
+                console.log('[RESUME_RAG]   Found clickable: ' + clickable.tagName);
+
+                // Try method 1: If it's a SELECT element, just set the value directly
+                if (clickable.tagName === 'SELECT') {
+                    console.log('[RESUME_RAG]   Native SELECT, setting value directly');
+                    for (const opt of clickable.options || []) {
+                        if (opt.text === targetValue) {
+                            clickable.value = opt.value;
+                            clickable.dispatchEvent(new Event('change', { bubbles: true }));
+                            return;
+                        }
+                    }
+                }
+
+                // Try method 2: Click and look for nearby options within the container
                 console.log('[RESUME_RAG]   Clicking dropdown...');
                 clickable.click();
 
-                // Wait for dropdown to open
+                // Wait a bit for dropdown to open
                 setTimeout(() => {
-                    const options = document.querySelectorAll('[role="option"], [class*="option"], li');
-                    console.log('[RESUME_RAG]   Found ' + options.length + ' options, looking for "' + targetValue + '"');
+                    // Look for options in the SAME container first (not global)
+                    let options = Array.from(container.querySelectorAll('[role="option"]'));
+
+                    // If no options found in container, check document
+                    if (options.length === 0) {
+                        options = Array.from(document.querySelectorAll('[role="option"]'));
+                    }
+
+                    console.log('[RESUME_RAG]   Found ' + options.length + ' options');
+
+                    // Filter to options that contain Yes/No text
+                    let yesNoOptions = options.filter(opt => {
+                        const text = opt.textContent?.trim() || '';
+                        return text === 'Yes' || text === 'No';
+                    });
+
+                    console.log('[RESUME_RAG]   Filtered to ' + yesNoOptions.length + ' Yes/No options');
+
+                    // If we found Yes/No options, use those; otherwise use all options
+                    if (yesNoOptions.length > 0) {
+                        options = yesNoOptions;
+                    }
 
                     let found = false;
                     for (const opt of options) {
                         const optText = opt.textContent?.trim() || '';
 
-                        // For country, match "United States +1"
-                        if (targetValue === 'United States' && /united states\s*\+/i.test(optText)) {
-                            console.log('[RESUME_RAG]   Found country option: ' + optText);
-                            opt.click();
-                            found = true;
-                            break;
-                        }
-                        // For Yes/No, exact match
-                        else if (optText === targetValue) {
-                            console.log('[RESUME_RAG]   Found option: ' + optText);
+                        if (optText === targetValue) {
+                            console.log('[RESUME_RAG]   Found "' + targetValue + '", clicking it');
                             opt.click();
                             found = true;
                             break;
@@ -285,7 +312,7 @@ function handleYesNoDropdowns() {
                     }
 
                     if (!found) {
-                        console.log('[RESUME_RAG]   Option not found, closing dropdown');
+                        console.log('[RESUME_RAG]   "' + targetValue + '" not found, closing dropdown with Escape');
                         const esc = new KeyboardEvent('keydown', {
                             key: 'Escape',
                             code: 'Escape',
@@ -294,7 +321,7 @@ function handleYesNoDropdowns() {
                         });
                         clickable.dispatchEvent(esc);
                     }
-                }, 250);
+                }, 300);
             }
         }
     });
