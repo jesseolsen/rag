@@ -181,17 +181,41 @@ class GreenhouseAutomation:
 
         counts = {'text_fields': 0, 'checkboxes': 0, 'dropdowns': 0}
 
-        # Get all inputs
-        inputs = await self.page.query_selector_all('input, select, textarea')
-        logger.info(f"Found {len(inputs)} form elements")
+        # Get all inputs from main page and iframes
+        inputs = []
+
+        # Main page inputs
+        main_inputs = await self.page.query_selector_all('input, select, textarea')
+        inputs.extend(main_inputs)
+        logger.info(f"Found {len(main_inputs)} form elements on main page")
+
+        # Try to find inputs in iframes
+        iframes = await self.page.query_selector_all('iframe')
+        logger.info(f"Found {len(iframes)} iframes")
+
+        for idx, iframe in enumerate(iframes):
+            try:
+                # Get frame from iframe element
+                frame = await iframe.content_frame()
+                if frame:
+                    iframe_inputs = await frame.query_selector_all('input, select, textarea')
+                    inputs.extend(iframe_inputs)
+                    logger.info(f"  Iframe {idx}: Found {len(iframe_inputs)} form elements")
+            except Exception as e:
+                logger.debug(f"  Iframe {idx}: Could not access - {e}")
+
+        logger.info(f"Total form elements: {len(inputs)}")
 
         for field in inputs:
-            field_type = await field.get_attribute('type')
-            field_id = await field.get_attribute('id') or ''
-            field_name = await field.get_attribute('name') or ''
-            placeholder = await field.get_attribute('placeholder') or ''
+            try:
+                field_type = await field.get_attribute('type')
+                field_id = await field.get_attribute('id') or ''
+                field_name = await field.get_attribute('name') or ''
+                placeholder = await field.get_attribute('placeholder') or ''
 
-            context = f"{field_id}|{field_name}|{placeholder}".lower()
+                context = f"{field_id}|{field_name}|{placeholder}".lower()
+            except:
+                continue
 
             # TEXT FIELDS
             if field_type in ['text', 'email', 'tel', None]:

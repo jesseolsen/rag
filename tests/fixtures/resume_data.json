@@ -1,0 +1,28 @@
+{
+    "first_name": "Jesse",
+    "last_name": "Olsen",
+    "email": "jesse.d.olsen@gmail.com",
+    "phone": "(970) 391-1018",
+    "city": "Spanish Fork",
+    "state": "UT",
+    "country": "USA",
+    "linkedin": "https://linkedin.com/in/jesse-olsen",
+    "website": "https://example.com",
+    "education": [
+        {
+            "school": "University of Utah",
+            "degree": "Bachelor's",
+            "field": "Computer Science",
+            "start_date": "2016-08",
+            "end_date": "2020-05"
+        }
+    ],
+    "experience": [
+        {
+            "company": "Coalition Software",
+            "title": "Senior Software Engineer",
+            "start_date": "2021-01",
+            "end_date": null
+        }
+    ]
+}
