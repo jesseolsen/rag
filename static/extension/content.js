@@ -209,9 +209,9 @@ function handleCustomDropdowns() {
             console.log('[RESUME_RAG] -> Prior experience question, will select: No');
         }
         // Questions that should be answered "Yes"
-        else if (/authorized|legal.*work|right.*work|eligib/i.test(context)) {
+        else if (/authorized|legal.*work|right.*work|eligib|acknowledge|agree|privacy|processing/i.test(context)) {
             targetValue = 'Yes';
-            console.log('[RESUME_RAG] -> Work authorization question, will select: Yes');
+            console.log('[RESUME_RAG] -> Compliance/authorization question, will select: Yes');
         }
         // Visa sponsorship questions - answer "No" (not required)
         else if (/visa|sponsor|require.*employ|h-?1|h-?1?b/i.test(context)) {
