@@ -93,8 +93,21 @@ function fillForm(resumeData) {
 
         // SELECTS - Handle country/work authorization dropdowns
         if (type === 'select-one' || field.tagName === 'SELECT') {
-            if (/country|authorized|legal|visa|sponsorship/i.test(context)) {
-                console.log('[RESUME_RAG] Processing country select:', name);
+            console.log('[RESUME_RAG] Found SELECT - name:', name, 'context:', context.substring(0, 60));
+
+            // Check if this looks like a country/work authorization field
+            const isRelevant = /country|authorized|legal|visa|sponsorship|work.*in|require/i.test(context);
+            console.log('[RESUME_RAG] Is relevant select:', isRelevant, '- will process:', isRelevant);
+
+            if (isRelevant) {
+                console.log('[RESUME_RAG] Processing country select:', name, '- options count:', field.options?.length || 0);
+
+                // Log all options to debug
+                if (field.options) {
+                    for (let i = 0; i < Math.min(field.options.length, 5); i++) {
+                        console.log('[RESUME_RAG] Option[' + i + ']:', field.options[i].text);
+                    }
+                }
 
                 for (const opt of field.options || []) {
                     if (/^usa$|^us$|united states|america/i.test(opt.text.trim())) {

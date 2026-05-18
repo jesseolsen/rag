@@ -36,17 +36,24 @@ document.getElementById('fillButton').addEventListener('click', async () => {
             action: 'fillForm',
             resumeData: resumeData
         }, (response) => {
-            console.log('Got response:', response);
+            console.log('[POPUP] Got response:', response);
+            console.log('[POPUP] Chrome error:', chrome.runtime.lastError);
+
             if (chrome.runtime.lastError) {
-                console.error('Chrome error:', chrome.runtime.lastError);
+                console.error('[POPUP] Chrome error details:', chrome.runtime.lastError.message);
                 showStatus('Error communicating with page. Try refreshing.', 'error');
                 return;
             }
-            if (response?.success) {
-                console.log('Success! filledCount:', response.filledCount);
+
+            console.log('[POPUP] Response object exists:', !!response);
+            console.log('[POPUP] Response.success:', response?.success);
+            console.log('[POPUP] Response.filledCount:', response?.filledCount);
+
+            if (response && response.success) {
+                console.log('[POPUP] Showing success with count:', response.filledCount);
                 showStatus(`✓ Form filled! Matched ${response.filledCount} fields.`, 'success');
             } else {
-                console.log('Response not successful:', response);
+                console.log('[POPUP] Response was not successful');
                 showStatus(response?.message || 'Failed to fill form', 'error');
             }
         });
