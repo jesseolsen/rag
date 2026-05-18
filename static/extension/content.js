@@ -176,9 +176,30 @@ function fillForm(resumeData) {
 function handleYesNoDropdowns() {
     console.log('[RESUME_RAG] Looking for Yes/No dropdowns');
 
-    // Find all div elements that have both a label and a select-container
-    const selectContainers = document.querySelectorAll('.select-container');
-    console.log('[RESUME_RAG] Found ' + selectContainers.length + ' select containers');
+    // Method 1: Look for .select-container
+    let selectContainers = Array.from(document.querySelectorAll('.select-container'));
+    console.log('[RESUME_RAG] Found ' + selectContainers.length + ' .select-container elements');
+
+    // Method 2: If no .select-container, look for elements with "Select..." text
+    if (selectContainers.length === 0) {
+        console.log('[RESUME_RAG] No .select-container found, searching for "Select..." text');
+        const selectTexts = Array.from(document.querySelectorAll('*')).filter(el =>
+            el.textContent.trim() === 'Select...' && el.offsetHeight > 0
+        );
+        console.log('[RESUME_RAG] Found ' + selectTexts.length + ' elements with "Select..." text');
+
+        // Get parent containers for these elements
+        selectContainers = selectTexts.map(el => {
+            // Walk up to find a clickable parent
+            let parent = el.parentElement;
+            while (parent && !parent.onclick && parent.getAttribute('role') !== 'button') {
+                parent = parent.parentElement;
+            }
+            return parent || el;
+        });
+
+        console.log('[RESUME_RAG] Extracted ' + selectContainers.length + ' container parents');
+    }
 
     selectContainers.forEach((container, idx) => {
         // Get the label for this container
