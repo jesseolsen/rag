@@ -78,24 +78,21 @@ This is a tradeoff:
 
 ## 💡 Possible Future Solutions
 
-1. **Greenhouse API Integration**
-   - If Greenhouse provides an API, use that instead of DOM manipulation
-   - Would require authentication and official support
+See `GREENHOUSE_SOLUTIONS.md` for detailed exploration of three approaches:
 
-2. **Custom Greenhouse Handler**
-   - Reverse-engineer Greenhouse component events
-   - Intercept their internal event system
-   - Very fragile and likely to break with updates
+1. **✅ Greenhouse Job Board API** (Recommended)
+   - Implemented in `greenhouse-api.js`
+   - Bypasses DOM entirely by submitting via API
+   - Requires testing with actual Greenhouse instance
 
-3. **User-Assisted Selection**
-   - Detect which dropdown is open
-   - Show keyboard shortcuts or visual hints to user
-   - Still requires manual interaction
+2. **✅ Browser Automation (Playwright)**
+   - Implemented in `greenhouse_automation.py`
+   - Works with any dropdown implementation
+   - Use for batch processing or CI/CD
 
-4. **Browser Automation (Puppeteer/Playwright)**
-   - Use headless browser automation instead of content script
-   - Would require different installation method
-   - More resource-intensive
+3. **⏳ Page Script Injection** (Experimental)
+   - Likely to fail due to closed shadow DOM
+   - Not recommended unless other approaches fail
 
 ## 📋 Current Extension Capabilities
 
