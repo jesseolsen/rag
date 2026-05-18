@@ -31,17 +31,22 @@ document.getElementById('fillButton').addEventListener('click', async () => {
         // Send to content script
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
+        console.log('Sending message to content script...');
         chrome.tabs.sendMessage(tab.id, {
             action: 'fillForm',
             resumeData: resumeData
         }, (response) => {
+            console.log('Got response:', response);
             if (chrome.runtime.lastError) {
+                console.error('Chrome error:', chrome.runtime.lastError);
                 showStatus('Error communicating with page. Try refreshing.', 'error');
                 return;
             }
             if (response?.success) {
+                console.log('Success! filledCount:', response.filledCount);
                 showStatus(`✓ Form filled! Matched ${response.filledCount} fields.`, 'success');
             } else {
+                console.log('Response not successful:', response);
                 showStatus(response?.message || 'Failed to fill form', 'error');
             }
         });

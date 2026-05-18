@@ -1,5 +1,8 @@
 // Content script - runs on every page
+console.log('[EXTENSION] Content script loaded on:', window.location.href);
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    console.log('[EXTENSION] Received message:', request.action);
     if (request.action === 'fillForm') {
         console.log('fillForm action received');
         const result = fillFormFields(request.resumeData);
