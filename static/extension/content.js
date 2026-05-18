@@ -1,18 +1,16 @@
 // Resume RAG Form Filler
 console.log('[RESUME_RAG] Content script loaded');
 
+let lastFilledCount = 0;
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     console.log('[RESUME_RAG] Message received:', request.action);
 
     if (request.action === 'fillForm') {
-        // Wait a moment for page to fully load (especially iframes)
-        setTimeout(() => {
-            const result = fillForm(request.resumeData);
-            console.log('[RESUME_RAG] Final result:', result);
-            sendResponse(result);
-        }, 1000);
-
-        return true; // Keep channel open for async response
+        const result = fillForm(request.resumeData);
+        lastFilledCount = Math.max(lastFilledCount, result.filledCount);
+        console.log('[RESUME_RAG] Final result:', result);
+        sendResponse(result);
     }
 });
 
@@ -97,15 +95,15 @@ function fillForm(resumeData) {
 
             // Check if this looks like a country/work authorization field
             const isRelevant = /country|authorized|legal|visa|sponsorship|work.*in|require/i.test(context);
-            console.log('[RESUME_RAG] Is relevant select:', isRelevant, '- will process:', isRelevant);
+            console.log('[RESUME_RAG] Is relevant select:', isRelevant);
 
             if (isRelevant) {
-                console.log('[RESUME_RAG] Processing country select:', name, '- options count:', field.options?.length || 0);
+                console.log('[RESUME_RAG] Processing select:', name, '- options count:', field.options?.length || 0);
 
                 // Log all options to debug
                 if (field.options) {
                     for (let i = 0; i < Math.min(field.options.length, 5); i++) {
-                        console.log('[RESUME_RAG] Option[' + i + ']:', field.options[i].text);
+                        console.log('[RESUME_RAG]   Option[' + i + ']:', field.options[i].text);
                     }
                 }
 
