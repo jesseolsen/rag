@@ -129,21 +129,19 @@ async function fillForm(resumeData) {
 
         // CHECKBOXES
         if (type === 'checkbox') {
-            console.log('[RESUME_RAG] Found checkbox:', id, '| context:', context);
+            console.log('[RESUME_RAG] Found checkbox - context:', context, '| label:', label);
             if (/linkedin/.test(context)) {
-                console.log('[RESUME_RAG] Checking LinkedIn checkbox');
                 field.checked = true;
                 field.dispatchEvent(new Event('change', { bubbles: true }));
                 field.dispatchEvent(new Event('click', { bubbles: true }));
                 filledCount++;
-                console.log('[RESUME_RAG] Filled checkbox, count now:', filledCount);
+                console.log('[RESUME_RAG] ✓ Checked LinkedIn');
             } else if (/acknowledge|agree|privacy|policy|data.?processing/i.test(context)) {
-                console.log('[RESUME_RAG] Checking acknowledgement checkbox');
                 field.checked = true;
                 field.dispatchEvent(new Event('change', { bubbles: true }));
                 field.dispatchEvent(new Event('click', { bubbles: true }));
                 filledCount++;
-                console.log('[RESUME_RAG] Filled acknowledgement checkbox, count now:', filledCount);
+                console.log('[RESUME_RAG] ✓ Checked Acknowledgement');
             }
             return;
         }
@@ -250,15 +248,12 @@ async function handleDropdowns() {
     let processedCount = 0;
 
     // Handle country dropdown first (special case - international phone input)
-    console.log('[RESUME_RAG] Processing country dropdown');
     const countryInput = document.querySelector('input#country');
     if (countryInput) {
-        console.log('[RESUME_RAG] Found country input');
         countryInput.focus();
-        await sleep(300);
+        await sleep(100);
 
         // Press DOWN to open the dropdown
-        console.log('[RESUME_RAG]   Pressing DOWN to open dropdown');
         const downEvent = new KeyboardEvent('keydown', {
             key: 'ArrowDown',
             code: 'ArrowDown',
@@ -266,7 +261,7 @@ async function handleDropdowns() {
             cancelable: true
         });
         countryInput.dispatchEvent(downEvent);
-        await sleep(500);
+        await sleep(200);
 
         // Type "United" character by character to filter to United States
         console.log('[RESUME_RAG]   Typing "United" character by character');
@@ -291,13 +286,12 @@ async function handleDropdowns() {
             });
             countryInput.dispatchEvent(keyupEvent);
 
-            await sleep(80);
+            await sleep(30);
         }
 
-        await sleep(600);
+        await sleep(200);
 
         // Press Enter to select United States
-        console.log('[RESUME_RAG]   Pressing Enter to select');
         const enterEvent = new KeyboardEvent('keydown', {
             key: 'Enter',
             code: 'Enter',
@@ -305,27 +299,22 @@ async function handleDropdowns() {
             cancelable: true
         });
         countryInput.dispatchEvent(enterEvent);
-        await sleep(400);
+        await sleep(150);
         processedCount++;
-        console.log('[RESUME_RAG] ✓ Country selected');
     }
 
     // Handle location (city) dropdown
-    console.log('[RESUME_RAG] Processing location dropdown');
     const locationInput = document.querySelector('input#candidate-location');
     if (locationInput) {
-        console.log('[RESUME_RAG] Found location input');
         locationInput.focus();
-        await sleep(300);
+        await sleep(100);
 
         // Clear any existing value first
-        console.log('[RESUME_RAG]   Clearing existing value');
         locationInput.value = '';
         locationInput.dispatchEvent(new Event('input', { bubbles: true }));
-        await sleep(200);
+        await sleep(80);
 
         // Press DOWN to open the dropdown
-        console.log('[RESUME_RAG]   Pressing DOWN to open dropdown');
         const downEvent = new KeyboardEvent('keydown', {
             key: 'ArrowDown',
             code: 'ArrowDown',
@@ -333,10 +322,9 @@ async function handleDropdowns() {
             cancelable: true
         });
         locationInput.dispatchEvent(downEvent);
-        await sleep(500);
+        await sleep(200);
 
         // Type "Spanish Fork" to filter to Spanish Fork, Utah
-        console.log('[RESUME_RAG]   Typing "Spanish Fork" character by character');
         const locationText = 'Spanish Fork';
         for (const char of locationText) {
             locationInput.value += char;
@@ -358,13 +346,12 @@ async function handleDropdowns() {
             });
             locationInput.dispatchEvent(keyupEvent);
 
-            await sleep(80);
+            await sleep(30);
         }
 
-        await sleep(600);
+        await sleep(200);
 
         // Press Enter to select Spanish Fork
-        console.log('[RESUME_RAG]   Pressing Enter to select');
         const enterEvent = new KeyboardEvent('keydown', {
             key: 'Enter',
             code: 'Enter',
@@ -372,9 +359,8 @@ async function handleDropdowns() {
             cancelable: true
         });
         locationInput.dispatchEvent(enterEvent);
-        await sleep(400);
+        await sleep(150);
         processedCount++;
-        console.log('[RESUME_RAG] ✓ Location selected');
     }
 
     // Find all React Select combobox inputs
@@ -424,12 +410,10 @@ async function handleDropdowns() {
         console.log('[RESUME_RAG] Dropdown: ' + fieldId + ' -> ' + targetValue);
 
         // Focus the input
-        console.log('[RESUME_RAG]   Focusing input');
         input.focus();
-        await sleep(300);
+        await sleep(100);
 
         // Press DOWN to open the dropdown
-        console.log('[RESUME_RAG]   Pressing DOWN to open dropdown');
         const downEvent = new KeyboardEvent('keydown', {
             key: 'ArrowDown',
             code: 'ArrowDown',
@@ -437,10 +421,9 @@ async function handleDropdowns() {
             cancelable: true
         });
         input.dispatchEvent(downEvent);
-        await sleep(500);
+        await sleep(150);
 
         // Type the target value character by character to filter
-        console.log('[RESUME_RAG]   Typing "' + targetValue + '" character by character');
         for (const char of targetValue) {
             input.value += char;
 
@@ -461,13 +444,12 @@ async function handleDropdowns() {
             });
             input.dispatchEvent(keyupEvent);
 
-            await sleep(80);
+            await sleep(30);
         }
 
-        await sleep(600);
+        await sleep(150);
 
         // Press Enter to select the first/only matching option
-        console.log('[RESUME_RAG]   Pressing Enter to select');
         const enterEvent = new KeyboardEvent('keydown', {
             key: 'Enter',
             code: 'Enter',
@@ -484,9 +466,8 @@ async function handleDropdowns() {
         });
         input.dispatchEvent(enterEventUp);
 
-        await sleep(500);
+        await sleep(150);
         processedCount++;
-        console.log('[RESUME_RAG]   ✓ Processed dropdown');
     }
 
     console.log('[RESUME_RAG] Dropdown processing complete. Processed: ' + processedCount);
