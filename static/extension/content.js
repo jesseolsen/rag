@@ -319,6 +319,7 @@ async function handleDropdowns() {
 
     // Handle location (city) dropdown
     if (locationInput) {
+        console.log('[RESUME_RAG] Processing location dropdown');
         locationInput.focus();
         await sleep(100);
 
@@ -362,7 +363,8 @@ async function handleDropdowns() {
             await sleep(30);
         }
 
-        await sleep(150);
+        console.log('[RESUME_RAG] Typed Spanish Fork, waiting 3 seconds for dropdown to settle...');
+        await sleep(3000);
 
         // Press Enter to select Spanish Fork
         const enterEvent = new KeyboardEvent('keydown', {
@@ -381,6 +383,27 @@ async function handleDropdowns() {
         });
         locationInput.dispatchEvent(enterEventUp);
 
+        console.log('[RESUME_RAG] Pressed ENTER, now pressing TAB to commit selection...');
+        await sleep(150);
+
+        // Press TAB to move focus and commit the selection
+        const tabEvent = new KeyboardEvent('keydown', {
+            key: 'Tab',
+            code: 'Tab',
+            bubbles: true,
+            cancelable: true
+        });
+        locationInput.dispatchEvent(tabEvent);
+
+        const tabEventUp = new KeyboardEvent('keyup', {
+            key: 'Tab',
+            code: 'Tab',
+            bubbles: true,
+            cancelable: true
+        });
+        locationInput.dispatchEvent(tabEventUp);
+
+        console.log('[RESUME_RAG] ✓ Location dropdown processed');
         await sleep(150);
         processedCount++;
     }
