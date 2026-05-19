@@ -20,15 +20,15 @@ pip install -r requirements.txt
 pytest -v
 ```
 
-This runs 7 tests covering:
+This runs tests covering:
 - ✅ Health check endpoint
-- ✅ Root endpoint  
+- ✅ Root endpoint
 - ✅ API routes registration
 - ✅ Text chunking logic
 - ✅ Resume section chunking
 - ✅ Empty section handling
 
-**Expected output:** `7 passed`
+**Expected output:** All tests pass
 
 ## Full Integration Test (With Database)
 
@@ -207,6 +207,39 @@ This provides an interactive interface to test all endpoints with built-in docum
 4. Use it in other endpoints
 5. Test `/api/v1/generate/cover-letter` with job details
 6. See the generated cover letter
+
+## Chrome Extension Testing
+
+### Manual Testing
+
+1. **Setup**
+   - Start backend: `uvicorn app.main:app --reload`
+   - Load extension in Chrome: `chrome://extensions/` → Load unpacked → `static/extension/`
+   - Verify you have a resume uploaded
+
+2. **Test Steps**
+   - Navigate to a Greenhouse job form (e.g., https://job-boards.greenhouse.io/embed/job_app?for=coalition)
+   - Click the Resume RAG extension icon
+   - Verify backend URL is `http://localhost:8000`
+   - Click **"Fill Form"**
+
+3. **Verify these fields get filled**
+   - First Name: From your resume
+   - Last Name: From your resume
+   - Email: From your resume
+   - Phone: From your resume
+   - City: From your resume
+   - Country: USA (selected, not text)
+   - How did you hear about us?: LinkedIn (checkbox checked)
+
+### Debugging Extension
+
+Open Chrome DevTools (F12) and look at the Console tab for logs prefixed with `[RESUME_RAG]`:
+- `Content script loaded` - Extension active
+- `Found X combobox inputs` - Dropdown detection
+- `✓ Found "Target Value" at arrow N` - Successful dropdown selection
+- `Form submission detected` - Form captured on submit
+- `Form data saved to backend` - Data persisted successfully
 
 ## Troubleshooting
 

@@ -45,3 +45,18 @@ class FormResponse(Base):
     form_data = Column(JSON, nullable=False)
     submitted_at = Column(DateTime(timezone=True), server_default=func.now())
     source = Column(String(50), default="extension")  # "extension" or "playwright"
+
+
+class FormFieldAnswer(Base):
+    __tablename__ = "form_field_answers"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    resume_id = Column(String(36), nullable=True)  # Optional: associate with a resume
+    question_keywords = Column(String(500), nullable=False)  # Normalized key phrases for fuzzy matching
+    question_text = Column(Text, nullable=False)  # Full original question for reference
+    answer_text = Column(Text, nullable=False)  # User's answer
+    field_type = Column(String(50), default="text")  # text, dropdown, checkbox, etc.
+    field_id = Column(String(255), nullable=True)  # HTML field ID if available
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
+    use_count = Column(Integer, default=1)  # Track how often this answer is reused

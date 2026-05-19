@@ -1,4 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import uuid
@@ -125,6 +126,25 @@ async def upload_resume(
         chunks=0,
         uploaded_at=resume.uploaded_at
     )
+
+
+@router.get("/", response_model=list[ResumeUploadResponse])
+async def list_resumes(db: AsyncSession = Depends(get_db)):
+    """Get all resumes ordered by upload date (newest first)."""
+    result = await db.execute(
+        select(Resume).order_by(Resume.uploaded_at.desc())
+    )
+    resumes = result.scalars().all()
+    return [
+        ResumeUploadResponse(
+            resume_id=r.id,
+            filename=r.filename,
+            status=r.status,
+            chunks=0,
+            uploaded_at=r.uploaded_at
+        )
+        for r in resumes
+    ]
 
 
 @router.get("/{resume_id}")
@@ -268,4 +288,26 @@ async def get_resume_data(
         experience=experience,
         education=education,
         skills=skills
+    )
+
+
+@router.get("/{resume_id}/file")
+async def download_resume_file(
+    resume_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get raw file bytes for form file input uploads."""
+    resume_id_str = str(resume_id)
+    result = await db.execute(
+        select(Resume).where(Resume.id == resume_id_str)
+    )
+    resume = result.scalar_one_or_none()
+
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+
+    return Response(
+        content=resume.file_content,
+        media_type=resume.content_type or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{resume.filename}"'}
     )

@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <style>
         body {
-            width: 350px;
+            min-width: 400px;
+            max-width: 900px;
             padding: 15px;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -97,33 +98,342 @@
             margin-top: 10px;
             text-align: center;
         }
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .upload-btn {
+            display: inline-block;
+            padding: 4px 8px;
+            background: #f0f0f0;
+            border: 1px solid #667eea;
+            border-radius: 3px;
+            color: #667eea;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .upload-btn:hover {
+            background: #e8eef9;
+        }
+        .upload-status {
+            padding: 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+        .upload-status.uploading {
+            background: #bbdefb;
+            color: #1565c0;
+        }
+        .upload-status.success {
+            background: #c8e6c9;
+            color: #2e7d32;
+        }
+        .upload-status.error {
+            background: #ffcdd2;
+            color: #c62828;
+        }
+        .resume-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            max-height: 150px;
+            overflow-y: auto;
+            background: white;
+        }
+        .resume-item {
+            display: grid;
+            grid-template-columns: 20px 16px 1fr 20px;
+            align-items: center;
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            gap: 6px;
+            cursor: move;
+        }
+        .resume-item:last-child {
+            border-bottom: none;
+        }
+        .resume-item.dragging {
+            opacity: 0.5;
+            background: #f9f9f9;
+        }
+        .drag-handle {
+            color: #999;
+            user-select: none;
+            font-size: 12px;
+            text-align: center;
+        }
+        .resume-item input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            margin: 0;
+            padding: 0;
+            cursor: pointer;
+        }
+        .resume-filename {
+            font-size: 12px;
+            color: #333;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .delete-resume {
+            color: #999;
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+            padding: 0;
+            background: none;
+            border: none;
+            transition: color 0.2s;
+            text-align: center;
+        }
+        .delete-resume:hover {
+            color: #c62828;
+        }
+        .no-resumes {
+            padding: 12px;
+            text-align: center;
+            font-size: 12px;
+            color: #999;
+            font-style: italic;
+        }
+        .server-error {
+            background: #ffebee;
+            border: 1px solid #ef5350;
+            border-radius: 4px;
+            padding: 12px;
+            margin: 10px 0;
+            color: #c62828;
+        }
+        .server-error h3 {
+            margin: 0 0 8px 0;
+            font-size: 13px;
+        }
+        .server-error p {
+            margin: 4px 0;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        .server-error code {
+            background: #fff3e0;
+            padding: 2px 4px;
+            border-radius: 2px;
+            font-family: monospace;
+            font-size: 11px;
+        }
+        .server-error a {
+            color: #1976d2;
+            text-decoration: none;
+        }
+        .server-error a:hover {
+            text-decoration: underline;
+        }
+        .field-answers-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            background: white;
+        }
+        .field-answer-item {
+            display: flex;
+            flex-direction: column;
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            gap: 4px;
+            font-size: 11px;
+        }
+        .field-answer-item:last-child {
+            border-bottom: none;
+        }
+        .field-answer-question {
+            font-weight: 600;
+            color: #333;
+            word-break: break-word;
+        }
+        .field-answer-text {
+            color: #666;
+            background: #f5f5f5;
+            padding: 4px;
+            border-radius: 2px;
+            word-break: break-word;
+            white-space: pre-wrap;
+            max-height: 60px;
+            overflow: hidden;
+        }
+        .field-answer-meta {
+            color: #999;
+            font-size: 10px;
+        }
+        .field-answer-actions {
+            display: flex;
+            gap: 6px;
+            margin-top: 4px;
+        }
+        .field-answer-btn {
+            padding: 3px 8px;
+            font-size: 10px;
+            border: 1px solid #ddd;
+            border-radius: 2px;
+            background: white;
+            color: #666;
+            cursor: pointer;
+            transition: all 0.2s;
+            flex: 1;
+            text-align: center;
+        }
+        .field-answer-btn:hover {
+            background: #f0f0f0;
+            border-color: #999;
+        }
+        .field-answer-btn.delete:hover {
+            background: #ffebee;
+            border-color: #c62828;
+            color: #c62828;
+        }
+        .field-answer-edit-form {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 6px;
+        }
+        .field-answer-edit-textarea {
+            width: 100%;
+            min-height: 60px;
+            padding: 6px;
+            font-size: 11px;
+            border: 1px solid #ddd;
+            border-radius: 2px;
+            font-family: monospace;
+            box-sizing: border-box;
+            resize: vertical;
+        }
+        .field-answer-edit-buttons {
+            display: flex;
+            gap: 6px;
+        }
+        .field-answer-edit-buttons button {
+            flex: 1;
+            padding: 4px;
+            font-size: 10px;
+            border: 1px solid #ddd;
+            border-radius: 2px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .field-answer-edit-buttons button.save {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        .field-answer-edit-buttons button.save:hover {
+            background: #764ba2;
+        }
+        .field-answer-edit-buttons button.cancel {
+            background: #f5f5f5;
+            color: #666;
+        }
+        .field-answer-edit-buttons button.cancel:hover {
+            background: #e0e0e0;
+        }
+        .no-answers {
+            padding: 12px;
+            text-align: center;
+            font-size: 12px;
+            color: #999;
+            font-style: italic;
+        }
+        .tab-buttons {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        .tab-btn {
+            flex: 1;
+            padding: 8px 4px;
+            background: white;
+            border: none;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            color: #999;
+            transition: all 0.2s;
+        }
+        .tab-btn.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>📋 Resume RAG</h1>
 
-        <div class="form-group">
-            <label>Backend URL</label>
-            <input type="text" id="backendUrl" placeholder="http://localhost:8000" value="http://localhost:8000">
+        <div id="serverError" class="server-error" style="display:none;">
+            <h3>⚠️ Server Not Responding</h3>
+            <p>The Resume RAG server is not reachable.</p>
+            <p>To get started:</p>
+            <p style="margin-left: 12px; font-size: 11px;">
+                1. Start the server:<br>
+                <code>uvicorn app.main:app --reload</code>
+            </p>
+            <p style="margin-top: 8px;">
+                <a id="serverLink" href="http://localhost:8000" target="_blank">Check server status →</a>
+            </p>
         </div>
 
-        <div class="form-group">
-            <label>Resume ID (optional)</label>
-            <input type="text" id="resumeId" placeholder="Leave blank to use latest">
+        <div class="tab-buttons">
+            <button class="tab-btn active" data-tab="resumes">Resumes</button>
+            <button class="tab-btn" data-tab="answers">Saved Answers</button>
         </div>
 
-        <button id="fillButton">Fill Form</button>
+        <div id="resumes-tab" class="tab-content active">
+            <div class="form-group">
+                <div class="section-header">
+                    <label>Resumes</label>
+                    <label class="upload-btn" for="resumeUpload">+ Upload</label>
+                    <input type="file" id="resumeUpload" accept=".pdf,.txt" style="display:none">
+                </div>
+                <div id="uploadStatus" class="upload-status" style="display:none"></div>
+                <ul id="resumeList" class="resume-list"></ul>
+                <div id="noResumes" class="no-resumes">No resumes uploaded yet</div>
+            </div>
+        </div>
+
+        <div id="answers-tab" class="tab-content">
+            <div class="form-group">
+                <label>Field Answers</label>
+                <ul id="fieldAnswersList" class="field-answers-list"></ul>
+                <div id="noAnswers" class="no-answers">No saved field answers yet</div>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 8px;">
+            <button id="fillButton" style="flex: 1;">Fill Form</button>
+            <button id="captureButton" style="flex: 1; background: #764ba2;">Capture Answers</button>
+        </div>
 
         <div id="status" class="status"></div>
-
-        <div class="info-box">
-            ℹ️ This extension fills text fields, checkboxes, and React Select dropdowns. It also saves your form data when you submit.
-        </div>
-
-        <div class="backend-url">
-            Make sure your Resume RAG server is running
-        </div>
     </div>
 
     <script src="popup.js"></script>

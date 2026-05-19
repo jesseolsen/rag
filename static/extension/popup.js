@@ -1,27 +1,314 @@
-// Popup script
-document.getElementById('fillButton').addEventListener('click', async () => {
-    const backendUrl = document.getElementById('backendUrl').value;
-    const resumeId = document.getElementById('resumeId').value;
-    const status = document.getElementById('status');
+// Resume list state: [{id, filename, enabled}]
+let resumeOrder = [];
 
-    // Save settings
-    chrome.storage.local.set({ backendUrl });
+// Drag state
+let draggedElement = null;
 
-    if (!backendUrl) {
-        showStatus('Backend URL is required', 'error');
+// Default backend URL
+const DEFAULT_BACKEND_URL = 'http://localhost:8000';
+let backendUrl = DEFAULT_BACKEND_URL;
+
+// Load settings and resumes on popup open
+document.addEventListener('DOMContentLoaded', async () => {
+    backendUrl = await getStoredBackendUrl() || DEFAULT_BACKEND_URL;
+
+    // Check if server is running
+    await checkServerConnection();
+
+    await loadResumes();
+    await loadFieldAnswers();
+    setupEventListeners();
+});
+
+async function getStoredBackendUrl() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get(['backendUrl'], (result) => {
+            resolve(result.backendUrl);
+        });
+    });
+}
+
+function saveBackendUrl(url) {
+    chrome.storage.local.set({ backendUrl: url });
+}
+
+async function checkServerConnection() {
+    const serverError = document.getElementById('serverError');
+    const serverLink = document.getElementById('serverLink');
+
+    try {
+        const response = await fetch(`${backendUrl}/health`, { timeout: 3000 });
+        if (response.ok) {
+            serverError.style.display = 'none';
+            return true;
+        } else {
+            throw new Error('Server returned error');
+        }
+    } catch (error) {
+        serverError.style.display = 'block';
+        serverLink.href = backendUrl;
+        return false;
+    }
+}
+
+async function getStoredResumeOrder() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get(['resumeOrder'], (result) => {
+            resolve(result.resumeOrder || []);
+        });
+    });
+}
+
+function saveResumeOrder(order) {
+    chrome.storage.local.set({ resumeOrder: order });
+}
+
+async function loadResumes() {
+    try {
+        // Fetch all resumes from backend
+        const response = await fetch(`${backendUrl}/api/v1/resume/`);
+        if (!response.ok) throw new Error('Failed to fetch resumes');
+
+        let backendResumes = await response.json();
+        console.log('[POPUP] Loaded resumes from backend:', backendResumes);
+
+        // Deduplicate by filename - keep only latest of each filename
+        const seenFilenames = new Set();
+        backendResumes = backendResumes.filter(r => {
+            if (seenFilenames.has(r.filename)) return false;
+            seenFilenames.add(r.filename);
+            return true;
+        });
+        console.log('[POPUP] After dedup:', backendResumes);
+
+        // Load saved order with enabled state
+        let savedOrder = await getStoredResumeOrder();
+        console.log('[POPUP] Saved order:', savedOrder);
+
+        // Create a map of backend resumes by ID for easy lookup
+        const backendMap = new Map(backendResumes.map(r => [r.resume_id, r]));
+
+        // Filter saved order to only include resumes still in backend
+        const existingResumes = savedOrder.filter(r => backendMap.has(r.id));
+
+        // Add new resumes from backend that aren't in saved order
+        const existingIds = new Set(existingResumes.map(r => r.id));
+        const newResumes = backendResumes
+            .filter(r => !existingIds.has(r.resume_id))
+            .map(r => ({ id: r.resume_id, filename: r.filename, enabled: true }));
+
+        // Combine: new resumes first, then existing ones (preserving order and enabled state)
+        resumeOrder = [...newResumes, ...existingResumes];
+
+        console.log('[POPUP] Final resumeOrder:', resumeOrder);
+        saveResumeOrder(resumeOrder);
+
+        renderResumeList();
+    } catch (error) {
+        console.error('[POPUP] Error loading resumes:', error);
+        showStatus('Error loading resumes', 'error', '#uploadStatus');
+    }
+}
+
+function renderResumeList() {
+    const list = document.getElementById('resumeList');
+    const noResumes = document.getElementById('noResumes');
+
+    if (resumeOrder.length === 0) {
+        list.innerHTML = '';
+        noResumes.style.display = 'block';
+        adjustPopupWidth();
         return;
     }
+
+    noResumes.style.display = 'none';
+    list.innerHTML = resumeOrder.map((resume, index) => {
+        const escapedFilename = escapeHtml(resume.filename);
+        return `
+        <li class="resume-item" draggable="true" data-index="${index}" data-id="${resume.id}">
+            <span class="drag-handle">⠿</span>
+            <input type="checkbox"
+                   class="resume-checkbox"
+                   ${resume.enabled ? 'checked' : ''}
+                   data-id="${resume.id}">
+            <span class="resume-filename">${escapedFilename}</span>
+            <button class="delete-resume" title="Remove">×</button>
+        </li>
+        `;
+    }).join('');
+
+    // Attach event listeners (instead of inline handlers)
+    list.querySelectorAll('.resume-item').forEach(item => {
+        item.addEventListener('dragstart', onDragStart);
+        item.addEventListener('dragover', onDragOver);
+        item.addEventListener('drop', onDrop);
+        item.addEventListener('dragend', onDragEnd);
+
+        // Checkbox change listener
+        item.querySelector('.resume-checkbox').addEventListener('change', (e) => {
+            toggleResume(e.target.getAttribute('data-id'));
+        });
+
+        // Delete button listener
+        item.querySelector('.delete-resume').addEventListener('click', (e) => {
+            const resumeId = item.getAttribute('data-id');
+            deleteResume(resumeId);
+        });
+    });
+
+    // Adjust popup width based on longest filename
+    setTimeout(adjustPopupWidth, 0);
+}
+
+function adjustPopupWidth() {
+    // Find the longest filename
+    const filenames = Array.from(document.querySelectorAll('.resume-filename'))
+        .map(el => el.textContent.length);
+
+    if (filenames.length === 0) return;
+
+    const maxFilenameLength = Math.max(...filenames);
+
+    // Approximate character width at 12px font size: ~7px per character
+    // Add space for: drag handle (30px) + checkbox (30px) + padding/gaps (60px) + delete button (30px)
+    const filenameWidth = maxFilenameLength * 7;
+    const requiredWidth = Math.min(900, 30 + 30 + filenameWidth + 60 + 30);
+
+    // Set body width with constraints
+    const body = document.body;
+    body.style.width = Math.max(400, requiredWidth) + 'px';
+}
+
+function onDragStart(e) {
+    draggedElement = this;
+    this.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+}
+
+function onDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+
+    if (this !== draggedElement) {
+        const allItems = Array.from(document.querySelectorAll('.resume-item'));
+        const draggedIndex = allItems.indexOf(draggedElement);
+        const targetIndex = allItems.indexOf(this);
+
+        if (draggedIndex < targetIndex) {
+            this.parentNode.insertBefore(draggedElement, this.nextSibling);
+        } else {
+            this.parentNode.insertBefore(draggedElement, this);
+        }
+    }
+}
+
+function onDrop(e) {
+    e.preventDefault();
+    updateResumeOrderFromDOM();
+}
+
+function onDragEnd(e) {
+    this.classList.remove('dragging');
+}
+
+function updateResumeOrderFromDOM() {
+    const items = document.querySelectorAll('.resume-item');
+    const newOrder = Array.from(items).map(item => {
+        const id = item.getAttribute('data-id');
+        const checkbox = item.querySelector('.resume-checkbox');
+        const resume = resumeOrder.find(r => r.id === id);
+        return { ...resume, enabled: checkbox.checked };
+    });
+
+    resumeOrder = newOrder;
+    saveResumeOrder(resumeOrder);
+}
+
+function toggleResume(resumeId) {
+    const resume = resumeOrder.find(r => r.id === resumeId);
+    if (resume) {
+        resume.enabled = !resume.enabled;
+        saveResumeOrder(resumeOrder);
+    }
+}
+
+function deleteResume(resumeId) {
+    resumeOrder = resumeOrder.filter(r => r.id !== resumeId);
+    saveResumeOrder(resumeOrder);
+    renderResumeList();
+}
+
+function setupEventListeners() {
+    document.getElementById('resumeUpload').addEventListener('change', handleResumeUpload);
+    document.getElementById('fillButton').addEventListener('click', fillForm);
+    document.getElementById('captureButton').addEventListener('click', captureAnswers);
+    setupTabSwitching();
+}
+
+async function handleResumeUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const uploadStatus = document.getElementById('uploadStatus');
+
+    uploadStatus.textContent = 'Uploading...';
+    uploadStatus.className = 'upload-status uploading';
+    uploadStatus.style.display = 'block';
+
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch(`${backendUrl}/api/v1/resume/upload`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) throw new Error('Upload failed');
+        const uploaded = await response.json();
+
+        // Prepend new resume to the list
+        resumeOrder.unshift({
+            id: uploaded.resume_id,
+            filename: uploaded.filename,
+            enabled: true
+        });
+        saveResumeOrder(resumeOrder);
+        renderResumeList();
+
+        uploadStatus.textContent = 'Uploaded!';
+        uploadStatus.className = 'upload-status success';
+        setTimeout(() => {
+            uploadStatus.style.display = 'none';
+        }, 2000);
+    } catch (error) {
+        console.error('[POPUP] Upload error:', error);
+        uploadStatus.textContent = `Error: ${error.message}`;
+        uploadStatus.className = 'upload-status error';
+    }
+
+    // Reset file input
+    e.target.value = '';
+}
+
+async function fillForm() {
+    const status = document.getElementById('status');
+
+    // Find first enabled resume
+    const enabledResumes = resumeOrder.filter(r => r.enabled);
+    if (enabledResumes.length === 0) {
+        showStatus('No enabled resumes. Upload or enable a resume.', 'error');
+        return;
+    }
+
+    const selectedResume = enabledResumes[0];
 
     status.textContent = 'Fetching resume data...';
     status.className = 'status info';
 
     try {
         // Get resume data
-        const endpoint = resumeId
-            ? `${backendUrl}/api/v1/resume/${resumeId}/data`
-            : `${backendUrl}/api/v1/resume/latest/data`;
-
-        const response = await fetch(endpoint);
+        const response = await fetch(`${backendUrl}/api/v1/resume/${selectedResume.id}/data`);
         if (!response.ok) {
             throw new Error(`Failed to fetch: ${response.statusText}`);
         }
@@ -34,13 +321,14 @@ document.getElementById('fillButton').addEventListener('click', async () => {
         console.log('Sending message to content script...');
         let responseReceived = false;
 
-        // Show processing message but don't set a timeout that would show an early result
         status.textContent = 'Filling in fields...';
         status.className = 'status info';
 
+        // Send the message
         chrome.tabs.sendMessage(tab.id, {
             action: 'fillForm',
             resumeData: resumeData,
+            resumeOrder: resumeOrder,
             backendUrl: backendUrl
         }, (response) => {
             if (responseReceived) {
@@ -55,30 +343,24 @@ document.getElementById('fillButton').addEventListener('click', async () => {
 
             if (chrome.runtime.lastError) {
                 console.error('[POPUP] Chrome error details:', chrome.runtime.lastError.message);
-                showStatus('Error communicating with page. Try refreshing.', 'error');
+                // Don't show error for "Receiving end does not exist" - it means content script isn't loaded
+                if (!chrome.runtime.lastError.message.includes('Receiving end does not exist')) {
+                    showStatus('Error communicating with page. Try refreshing.', 'error');
+                }
                 return;
             }
 
-            console.log('[POPUP] Response object exists:', !!response);
-            console.log('[POPUP] Response.success:', response?.success);
-            console.log('[POPUP] Response.filledCount:', response?.filledCount);
-
             if (response && response.success) {
-                const count = response.filledCount || 0;
-                console.log('[POPUP] Response details:', JSON.stringify(response));
-                console.log('[POPUP] Count extracted:', count);
-                console.log('[POPUP] Form fill complete with', count, 'fields');
-                // Don't show the response here - wait for the formFillComplete message instead
+                console.log('[POPUP] Form fill complete');
             } else {
                 console.log('[POPUP] Response was not successful:', response);
                 showStatus(response?.message || 'Failed to fill form', 'error');
             }
         });
-
     } catch (error) {
         showStatus(`Error: ${error.message}`, 'error');
     }
-});
+}
 
 function showStatus(message, type) {
     const status = document.getElementById('status');
@@ -98,9 +380,241 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 });
 
-// Load saved settings on popup open
-chrome.storage.local.get(['backendUrl'], (result) => {
-    if (result.backendUrl) {
-        document.getElementById('backendUrl').value = result.backendUrl;
+async function loadFieldAnswers() {
+    try {
+        const response = await fetch(`${backendUrl}/api/v1/field-answers/`);
+        if (!response.ok) {
+            console.log('[POPUP] Could not fetch field answers');
+            return;
+        }
+
+        const data = await response.json();
+        const answers = data.answers || [];
+
+        renderFieldAnswers(answers);
+    } catch (error) {
+        console.error('[POPUP] Error loading field answers:', error);
     }
-});
+}
+
+function renderFieldAnswers(answers) {
+    const list = document.getElementById('fieldAnswersList');
+    const noAnswers = document.getElementById('noAnswers');
+
+    if (answers.length === 0) {
+        list.innerHTML = '';
+        noAnswers.style.display = 'block';
+        return;
+    }
+
+    noAnswers.style.display = 'none';
+    list.innerHTML = answers.map((answer) => {
+        const escapedQuestion = escapeHtml(answer.question_text);
+        const escapedAnswer = escapeHtml(answer.answer_text.substring(0, 100));
+        return `
+        <li class="field-answer-item" data-answer-id="${answer.id}">
+            <div class="field-answer-question" title="${escapedQuestion}">
+                ${escapedQuestion.substring(0, 80)}${answer.question_text.length > 80 ? '...' : ''}
+            </div>
+            <div class="field-answer-text">${escapedAnswer}</div>
+            <div class="field-answer-meta">
+                Used ${answer.use_count} time${answer.use_count !== 1 ? 's' : ''}
+                ${answer.last_used_at ? ' • ' + new Date(answer.last_used_at).toLocaleDateString() : ''}
+            </div>
+            <div class="field-answer-actions">
+                <button class="field-answer-btn edit" title="Edit answer">Edit</button>
+                <button class="field-answer-btn delete" title="Delete answer">Delete</button>
+            </div>
+        </li>
+        `;
+    }).join('');
+
+    // Attach event listeners for edit and delete
+    list.querySelectorAll('.field-answer-item').forEach(item => {
+        const answerId = item.getAttribute('data-answer-id');
+
+        item.querySelector('.edit').addEventListener('click', () => {
+            editFieldAnswer(answerId, list);
+        });
+
+        item.querySelector('.delete').addEventListener('click', () => {
+            deleteFieldAnswer(answerId, list);
+        });
+    });
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+async function editFieldAnswer(answerId, list) {
+    const item = list.querySelector(`[data-answer-id="${answerId}"]`);
+    if (!item) return;
+
+    // Find the answer object from current data
+    // We'll fetch it to get the full data
+    try {
+        const response = await fetch(`${backendUrl}/api/v1/field-answers/${answerId}`);
+        if (!response.ok) throw new Error('Failed to fetch answer');
+        const answer = await response.json();
+
+        // Hide action buttons and show edit form
+        item.querySelector('.field-answer-actions').style.display = 'none';
+        item.querySelector('.field-answer-text').style.display = 'none';
+
+        // Create edit form
+        const editForm = document.createElement('div');
+        editForm.className = 'field-answer-edit-form';
+        editForm.innerHTML = `
+            <textarea class="field-answer-edit-textarea">${escapeHtml(answer.answer_text)}</textarea>
+            <div class="field-answer-edit-buttons">
+                <button class="save">Save</button>
+                <button class="cancel">Cancel</button>
+            </div>
+        `;
+
+        item.appendChild(editForm);
+
+        const textarea = editForm.querySelector('textarea');
+        const saveBtn = editForm.querySelector('.save');
+        const cancelBtn = editForm.querySelector('.cancel');
+
+        // Save edit
+        saveBtn.addEventListener('click', async () => {
+            const newAnswerText = textarea.value.trim();
+            if (!newAnswerText) {
+                alert('Answer cannot be empty');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${backendUrl}/api/v1/field-answers/${answerId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        question_text: answer.question_text,
+                        answer_text: newAnswerText,
+                        field_type: answer.field_type
+                    })
+                });
+
+                if (!response.ok) throw new Error('Failed to update answer');
+
+                // Reload answers to reflect changes
+                await loadFieldAnswers();
+            } catch (error) {
+                console.error('Error updating answer:', error);
+                alert('Failed to update answer');
+            }
+        });
+
+        // Cancel edit
+        cancelBtn.addEventListener('click', () => {
+            editForm.remove();
+            item.querySelector('.field-answer-actions').style.display = 'flex';
+            item.querySelector('.field-answer-text').style.display = 'block';
+        });
+
+        // Focus textarea
+        textarea.focus();
+        textarea.select();
+    } catch (error) {
+        console.error('Error fetching answer for edit:', error);
+        alert('Failed to load answer for editing');
+    }
+}
+
+async function deleteFieldAnswer(answerId, list) {
+    if (!confirm('Are you sure you want to delete this answer?')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${backendUrl}/api/v1/field-answers/${answerId}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) throw new Error('Failed to delete answer');
+
+        // Reload answers to reflect deletion
+        await loadFieldAnswers();
+    } catch (error) {
+        console.error('Error deleting answer:', error);
+        alert('Failed to delete answer');
+    }
+}
+
+function setupTabSwitching() {
+    const tabButtons = document.querySelectorAll('.tab-btn');
+    tabButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tabName = btn.getAttribute('data-tab');
+
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            // Remove active state from all buttons
+            tabButtons.forEach(b => b.classList.remove('active'));
+
+            // Show selected tab and mark button as active
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+            btn.classList.add('active');
+        });
+    });
+}
+
+async function captureAnswers() {
+    const status = document.getElementById('status');
+    const captureButton = document.getElementById('captureButton');
+
+    try {
+        status.textContent = 'Scanning form for new answers...';
+        status.className = 'status info';
+        captureButton.disabled = true;
+
+        // Get the active tab to find the form page
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+        // Send request to content script to capture answers
+        chrome.tabs.sendMessage(tab.id, {
+            action: 'captureAnswers',
+            backendUrl: backendUrl,
+            filledFields: {}  // Content script already has this in window.RESUME_RAG_FILLED_FIELDS
+        }, async (response) => {
+            captureButton.disabled = false;
+
+            if (chrome.runtime.lastError) {
+                console.error('[POPUP] Chrome error:', chrome.runtime.lastError);
+                status.textContent = 'Extension not available on this page. Try refreshing.';
+                status.className = 'status error';
+                return;
+            }
+
+            if (response && response.success) {
+                status.textContent = response.message;
+                status.className = 'status success';
+
+                // Reload the saved answers list
+                await loadFieldAnswers();
+
+                // Switch to answers tab to show what was captured
+                const answersTab = document.querySelector('[data-tab="answers"]');
+                if (answersTab) {
+                    answersTab.click();
+                }
+            } else {
+                status.textContent = response?.error || 'Failed to capture answers';
+                status.className = 'status error';
+            }
+        });
+    } catch (error) {
+        captureButton.disabled = false;
+        status.textContent = `Error: ${error.message}`;
+        status.className = 'status error';
+        console.error('[POPUP] Capture error:', error);
+    }
+}

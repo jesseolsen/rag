@@ -65,7 +65,7 @@ rag/
 │   │   └── schemas.py          # Pydantic request/response models
 │   └── services/               # Business logic
 │       ├── __init__.py
-│       ├── embeddings.py       # OpenAI embeddings
+│       ├── embeddings.py       # Sentence Transformers embeddings
 │       ├── resume_processor.py # PDF parsing, section detection
 │       ├── chunking.py         # Text chunking logic
 │       ├── search.py           # Vector search
@@ -93,9 +93,9 @@ rag/
 ### Services
 
 **embeddings.py**
-- `generate_embeddings(text)` - Generate OpenAI embeddings (async)
+- `generate_embeddings(text)` - Generate embeddings using Sentence Transformers (async)
 - Handles single strings or lists
-- Returns vectors for pgvector storage
+- Returns 384-dimensional vectors for pgvector storage
 
 **resume_processor.py**
 - `extract_text_from_pdf(content)` - Extract text from PDF using PyMuPDF
@@ -130,7 +130,7 @@ rag/
 - `resume_id` (UUID): Foreign key
 - `section` (String): skills, experience, education, projects, summary
 - `content` (Text): Chunk content
-- `embedding` (Vector(1536)): OpenAI embedding
+- `embedding` (Vector(384)): Sentence Transformers embedding
 - `chunk_index` (Integer): Position in section
 - `created_at` (DateTime, auto)
 
@@ -371,5 +371,5 @@ print(f"Took {elapsed:.2f}s")
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [SQLAlchemy 2.0](https://docs.sqlalchemy.org/en/20/)
 - [pgvector Documentation](https://github.com/pgvector/pgvector)
-- [OpenAI API](https://platform.openai.com/docs/api-reference)
+- [Sentence Transformers](https://www.sbert.net/)
 - [Anthropic API](https://docs.anthropic.com/)
