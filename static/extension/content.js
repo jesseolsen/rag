@@ -312,7 +312,7 @@ async function handleDropdowns() {
         // Clear any existing value first
         locationInput.value = '';
         locationInput.dispatchEvent(new Event('input', { bubbles: true }));
-        await sleep(80);
+        await sleep(100);
 
         // Press DOWN to open the dropdown
         const downEvent = new KeyboardEvent('keydown', {
@@ -349,7 +349,7 @@ async function handleDropdowns() {
             await sleep(30);
         }
 
-        await sleep(200);
+        await sleep(150);
 
         // Press Enter to select Spanish Fork
         const enterEvent = new KeyboardEvent('keydown', {
