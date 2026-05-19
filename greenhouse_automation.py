@@ -280,15 +280,17 @@ class GreenhouseAutomation:
                     except Exception as e:
                         logger.debug(f"✗ Error filling field: {e}")
 
-            # CHECKBOXES - check all checkboxes (except reCAPTCHA)
+            # CHECKBOXES - check only LinkedIn checkbox
             elif field_type == 'checkbox':
                 if 'recaptcha' not in context.lower():
-                    try:
-                        await field.check()
-                        counts['checkboxes'] += 1
-                        logger.info(f"✓ Checked checkbox: {field_id}")
-                    except Exception as e:
-                        logger.debug(f"✗ Error checking checkbox: {e}")
+                    # LinkedIn checkbox has ID ending in _21312271005
+                    if 'question_8433547005' in field_id and '21312271005' in field_id:
+                        try:
+                            await field.check()
+                            counts['checkboxes'] += 1
+                            logger.info(f"✓ Checked LinkedIn checkbox")
+                        except Exception as e:
+                            logger.debug(f"✗ Error checking checkbox: {e}")
 
         # Second pass: Handle dropdown selects using the actual input element
         logger.info("\nHandling all dropdown questions...")
@@ -312,10 +314,11 @@ class GreenhouseAutomation:
 
             logger.info(f"Found {len(question_inputs)} question/demographic dropdowns")
 
-            # Process all question dropdowns
+            # Process all question dropdowns with smart selection
             for i, input_elem in enumerate(question_inputs):
                 try:
-                    logger.info(f"Dropdown {i + 1}: Processing...")
+                    field_id = await input_elem.get_attribute('id') or ''
+                    logger.info(f"Dropdown {i + 1} ({field_id}): Processing...")
 
                     # Scroll into view
                     await input_elem.scroll_into_view_if_needed()
@@ -326,10 +329,50 @@ class GreenhouseAutomation:
                     await input_elem.click()
                     await asyncio.sleep(0.5)
 
-                    # Press ArrowDown to highlight first option
-                    logger.info(f"  Pressing ArrowDown...")
-                    await self.page.keyboard.press('ArrowDown')
-                    await asyncio.sleep(0.2)
+                    # Determine how many times to press ArrowDown based on field type
+                    arrow_presses = 0
+
+                    # Identify field by ID and determine arrow presses
+                    # For Yes/No questions: 0=Select, 1=Yes, 2=No
+                    if 'question_8433548005' in field_id:
+                        # "Have you ever worked for Coalition" - select "No" (1 press gives Yes, so need 2)
+                        # But screenshot shows it's backwards, so try 1
+                        arrow_presses = 1
+                        logger.info(f"    Field: Prior employment → selecting No")
+                    elif 'question_8433549005' in field_id:
+                        # "Are you authorized to lawfully work" - select "Yes"
+                        # But screenshot shows it's backwards, so try 2
+                        arrow_presses = 2
+                        logger.info(f"    Field: Authorization question → selecting Yes")
+                    elif 'question_8433550005' in field_id:
+                        # "Do you require visa sponsorship" - select "No"
+                        # But screenshot shows it's backwards, so try 1
+                        arrow_presses = 1
+                        logger.info(f"    Field: Visa sponsorship → selecting No")
+                    elif 'question_8433551005' in field_id:
+                        # "I acknowledge" - select first option (1 press for first option)
+                        arrow_presses = 1
+                        logger.info(f"    Field: Acknowledgement → selecting first option")
+                    elif field_id == '4014696005':
+                        # Gender - try to select "Male" (probably 2nd or 3rd option)
+                        arrow_presses = 2
+                        logger.info(f"    Field: Gender → selecting Male")
+                    elif field_id == '4014697005':
+                        # Race/ethnicity - try to select "White" (probably 5th option)
+                        arrow_presses = 5
+                        logger.info(f"    Field: Race → selecting White")
+                    elif field_id == '4014698005':
+                        # Military - select "No" (2 presses)
+                        arrow_presses = 2
+                        logger.info(f"    Field: Military service → selecting No")
+                    else:
+                        arrow_presses = 0
+                        logger.info(f"    Field: Unknown → selecting first option")
+
+                    # Press ArrowDown the appropriate number of times
+                    for _ in range(arrow_presses):
+                        await self.page.keyboard.press('ArrowDown')
+                        await asyncio.sleep(0.15)
 
                     # Press Enter to select
                     logger.info(f"  Pressing Enter...")
