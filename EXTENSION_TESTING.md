@@ -10,12 +10,22 @@
 ## Testing the Extension
 
 ### Setup
-1. Make sure your Resume RAG backend is running:
+1. Set up the database with the new form_responses table:
    ```bash
-   python manage.py runserver
+   # If using Docker
+   docker-compose down && docker-compose up -d
+   
+   # If using local SQLite or PostgreSQL, run alembic
+   alembic upgrade head
    ```
 
-2. Navigate to a Greenhouse job application form:
+2. Start your Resume RAG backend:
+   ```bash
+   # Using uvicorn directly
+   uvicorn app.main:app --reload
+   ```
+
+3. Navigate to a Greenhouse job application form:
    ```
    https://job-boards.greenhouse.io/embed/job_app?for=coalition&jr_id=699f309994ef206f184e4fd6&token=4665924005&utm_source=jobright
    ```
@@ -65,12 +75,21 @@ POST /api/v1/form-response
     "first_name": "Jesse",
     "last_name": "Olsen",
     "email": "mejesseolsen@gmail.com",
-    ... all form fields
-  }
+    "phone": "(970) 391-1018",
+    "country": "United States",
+    "question_8433548005": "No",
+    "question_8433549005": "Yes",
+    "question_8433550005": "No",
+    "question_8433551005": "I acknowledge",
+    "4014696005": "Male",
+    "4014697005": "White or Caucasian",
+    "4014698005": "No"
+  },
+  "source": "extension"
 }
 ```
 
-You'll need to implement this endpoint in your backend if not already present.
+The endpoint is already implemented in the backend (`app/api/forms.py`) and saves all submitted data to the `form_responses` table with timestamp and source tracking.
 
 ## Comparing Playwright vs Extension
 
