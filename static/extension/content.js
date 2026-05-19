@@ -219,9 +219,72 @@ async function fillForm(resumeData) {
 }
 
 async function handleDropdowns() {
-    console.log('[RESUME_RAG] Processing Greenhouse React Select dropdowns');
+    console.log('[RESUME_RAG] Processing dropdowns');
 
-    // Find all combobox inputs (React Select controls)
+    let processedCount = 0;
+
+    // Handle country dropdown first (special case - international phone input)
+    console.log('[RESUME_RAG] Processing country dropdown');
+    const countryInput = document.querySelector('input#country');
+    if (countryInput) {
+        console.log('[RESUME_RAG] Found country input');
+        countryInput.focus();
+        await sleep(300);
+
+        // Press DOWN to open the dropdown
+        console.log('[RESUME_RAG]   Pressing DOWN to open dropdown');
+        const downEvent = new KeyboardEvent('keydown', {
+            key: 'ArrowDown',
+            code: 'ArrowDown',
+            bubbles: true,
+            cancelable: true
+        });
+        countryInput.dispatchEvent(downEvent);
+        await sleep(500);
+
+        // Type "United" character by character to filter to United States
+        console.log('[RESUME_RAG]   Typing "United" character by character');
+        const countryText = 'United';
+        for (const char of countryText) {
+            countryInput.value += char;
+
+            const keydownEvent = new KeyboardEvent('keydown', {
+                key: char,
+                bubbles: true,
+                cancelable: true
+            });
+            countryInput.dispatchEvent(keydownEvent);
+
+            const inputEvent = new Event('input', { bubbles: true });
+            countryInput.dispatchEvent(inputEvent);
+
+            const keyupEvent = new KeyboardEvent('keyup', {
+                key: char,
+                bubbles: true,
+                cancelable: true
+            });
+            countryInput.dispatchEvent(keyupEvent);
+
+            await sleep(80);
+        }
+
+        await sleep(600);
+
+        // Press Enter to select United States
+        console.log('[RESUME_RAG]   Pressing Enter to select');
+        const enterEvent = new KeyboardEvent('keydown', {
+            key: 'Enter',
+            code: 'Enter',
+            bubbles: true,
+            cancelable: true
+        });
+        countryInput.dispatchEvent(enterEvent);
+        await sleep(400);
+        processedCount++;
+        console.log('[RESUME_RAG] ✓ Country selected');
+    }
+
+    // Find all React Select combobox inputs
     const inputs = document.querySelectorAll('input[role="combobox"]');
     console.log('[RESUME_RAG] Found ' + inputs.length + ' combobox inputs');
 
@@ -231,6 +294,11 @@ async function handleDropdowns() {
     inputs.forEach(input => {
         const fieldId = input.id || '';
         let targetValue = null;
+
+        // Skip country and phone inputs - already handled above
+        if (fieldId === 'country' || fieldId.includes('iti')) {
+            return;
+        }
 
         if (fieldId.includes('question_8433548005')) {
             targetValue = 'No';
@@ -253,11 +321,9 @@ async function handleDropdowns() {
         }
     });
 
-    console.log('[RESUME_RAG] Configured dropdowns:', Object.keys(dropdownConfig).length);
+    console.log('[RESUME_RAG] Configured React Select dropdowns:', Object.keys(dropdownConfig).length);
 
-    let processedCount = 0;
-
-    // Process each dropdown sequentially
+    // Process each React Select dropdown sequentially
     for (const [fieldId, targetValue] of Object.entries(dropdownConfig)) {
         const input = document.querySelector(`input#${CSS.escape(fieldId)}`);
         if (!input) continue;
@@ -267,23 +333,43 @@ async function handleDropdowns() {
         // Focus the input
         console.log('[RESUME_RAG]   Focusing input');
         input.focus();
-        await sleep(200);
+        await sleep(300);
 
-        // Clear any existing value
-        input.value = '';
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        await sleep(100);
+        // Press DOWN to open the dropdown
+        console.log('[RESUME_RAG]   Pressing DOWN to open dropdown');
+        const downEvent = new KeyboardEvent('keydown', {
+            key: 'ArrowDown',
+            code: 'ArrowDown',
+            bubbles: true,
+            cancelable: true
+        });
+        input.dispatchEvent(downEvent);
+        await sleep(500);
 
-        // Type the target value
-        console.log('[RESUME_RAG]   Typing "' + targetValue + '"');
-        input.value = targetValue;
+        // Type the target value character by character to filter
+        console.log('[RESUME_RAG]   Typing "' + targetValue + '" character by character');
+        for (const char of targetValue) {
+            input.value += char;
 
-        // Dispatch input event to trigger React Select's filter
-        const inputEvent = new Event('input', { bubbles: true });
-        input.dispatchEvent(inputEvent);
+            const keydownEvent = new KeyboardEvent('keydown', {
+                key: char,
+                bubbles: true,
+                cancelable: true
+            });
+            input.dispatchEvent(keydownEvent);
 
-        const changeEvent = new Event('change', { bubbles: true });
-        input.dispatchEvent(changeEvent);
+            const inputEvent = new Event('input', { bubbles: true });
+            input.dispatchEvent(inputEvent);
+
+            const keyupEvent = new KeyboardEvent('keyup', {
+                key: char,
+                bubbles: true,
+                cancelable: true
+            });
+            input.dispatchEvent(keyupEvent);
+
+            await sleep(80);
+        }
 
         await sleep(600);
 
