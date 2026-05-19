@@ -247,6 +247,20 @@ async function handleDropdowns() {
 
     let processedCount = 0;
 
+    // Wait for location field to appear in DOM (form loads asynchronously)
+    let locationInput = document.querySelector('input#candidate-location');
+    if (!locationInput) {
+        console.log('[RESUME_RAG] Waiting for location field to load...');
+        for (let i = 0; i < 30; i++) {
+            await sleep(100);
+            locationInput = document.querySelector('input#candidate-location');
+            if (locationInput) {
+                console.log('[RESUME_RAG] Location field found after', i * 100, 'ms');
+                break;
+            }
+        }
+    }
+
     // Handle country dropdown first (special case - international phone input)
     const countryInput = document.querySelector('input#country');
     if (countryInput) {
@@ -304,7 +318,6 @@ async function handleDropdowns() {
     }
 
     // Handle location (city) dropdown
-    const locationInput = document.querySelector('input#candidate-location');
     if (locationInput) {
         locationInput.focus();
         await sleep(100);
