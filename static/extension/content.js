@@ -3,11 +3,18 @@ console.log('[RESUME_RAG] Content script loaded');
 
 // Store last result globally for access from popup
 window.RESUME_RAG_LAST_RESULT = null;
+window.RESUME_RAG_BACKEND_URL = 'http://localhost:8000';
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     console.log('[RESUME_RAG] Message received:', request.action, 'from:', sender.url);
 
     if (request.action === 'fillForm') {
+        // Store backend URL for use in form submission
+        if (request.backendUrl) {
+            window.RESUME_RAG_BACKEND_URL = request.backendUrl;
+            console.log('[RESUME_RAG] Backend URL set to:', request.backendUrl);
+        }
+
         const result = fillForm(request.resumeData);
         window.RESUME_RAG_LAST_RESULT = result;
         console.log('[RESUME_RAG] Final result:', result);
@@ -22,6 +29,35 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
     }
 });
+
+// Hook into form submissions to capture final values
+document.addEventListener('submit', async (e) => {
+    const form = e.target;
+    console.log('[RESUME_RAG] Form submission detected:', form);
+
+    // Capture form values and send to backend
+    const formData = captureFormData();
+    if (formData && Object.keys(formData).length > 0) {
+        console.log('[RESUME_RAG] Capturing form data on submit:', formData);
+        try {
+            const backendUrl = window.RESUME_RAG_BACKEND_URL || 'http://localhost:8000';
+            const response = await fetch(`${backendUrl}/api/v1/form-response`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    url: window.location.href,
+                    timestamp: new Date().toISOString(),
+                    data: formData
+                })
+            });
+            if (response.ok) {
+                console.log('[RESUME_RAG] ✓ Form data saved to backend');
+            }
+        } catch (err) {
+            console.log('[RESUME_RAG] Could not save form data:', err.message);
+        }
+    }
+}, true);
 
 function fillForm(resumeData) {
     console.log('[RESUME_RAG] Starting form fill');
@@ -164,174 +200,144 @@ function fillForm(resumeData) {
         }
     });
 
-    // Handle Greenhouse custom Yes/No dropdown components
-    console.log('[RESUME_RAG] Processing custom Yes/No dropdowns');
-    handleYesNoDropdowns();
+    // Handle Greenhouse custom dropdowns (asynchronously)
+    console.log('[RESUME_RAG] Processing custom dropdown components');
+    handleDropdowns().then(() => {
+        console.log('[RESUME_RAG] Total filled:', filledCount);
+        console.log('%cFORM FILLED: ' + filledCount + ' fields', 'font-size: 16px; color: green; font-weight: bold;');
+    });
 
-    console.log('[RESUME_RAG] Total filled:', filledCount);
-    console.log('%cFORM FILLED: ' + filledCount + ' fields', 'font-size: 16px; color: green; font-weight: bold;');
     return { success: true, filledCount };
 }
 
-function handleYesNoDropdowns() {
-    console.log('[RESUME_RAG] Looking for Yes/No dropdowns');
+async function handleDropdowns() {
+    console.log('[RESUME_RAG] Processing Greenhouse React Select dropdowns');
 
-    // Method 1: Look for .select-container
-    let selectContainers = Array.from(document.querySelectorAll('.select-container'));
-    console.log('[RESUME_RAG] Found ' + selectContainers.length + ' .select-container elements');
+    // Find all combobox inputs (React Select controls)
+    const inputs = document.querySelectorAll('input[role="combobox"]');
+    console.log('[RESUME_RAG] Found ' + inputs.length + ' combobox inputs');
 
-    // Method 2: If no .select-container, look for elements with "Select..." text
-    if (selectContainers.length === 0) {
-        console.log('[RESUME_RAG] No .select-container found, searching for "Select..." text');
-        const selectTexts = Array.from(document.querySelectorAll('*')).filter(el =>
-            el.textContent.trim() === 'Select...' && el.offsetHeight > 0
-        );
-        console.log('[RESUME_RAG] Found ' + selectTexts.length + ' elements with "Select..." text');
+    const dropdownConfig = {};
 
-        // Get parent containers for these elements
-        selectContainers = selectTexts.map(el => {
-            // Walk up to find a clickable parent
-            let parent = el.parentElement;
-            while (parent && !parent.onclick && parent.getAttribute('role') !== 'button') {
-                parent = parent.parentElement;
-            }
-            return parent || el;
-        });
-
-        console.log('[RESUME_RAG] Extracted ' + selectContainers.length + ' container parents');
-    }
-
-    selectContainers.forEach((container, idx) => {
-        // Get the label for this container
-        let labelText = '';
-
-        // Method 1: Check previous sibling
-        let prevEl = container.previousElementSibling;
-        if (prevEl && prevEl.tagName === 'LABEL') {
-            labelText = prevEl.textContent?.toLowerCase() || '';
-        }
-
-        // Method 2: Check parent's label
-        if (!labelText) {
-            const parentLabel = container.parentElement?.querySelector('label');
-            if (parentLabel) {
-                labelText = parentLabel.textContent?.toLowerCase() || '';
-            }
-        }
-
-        // Method 3: Check siblings within parent
-        if (!labelText) {
-            const parent = container.parentElement;
-            if (parent) {
-                const label = parent.querySelector('label');
-                if (label) {
-                    labelText = label.textContent?.toLowerCase() || '';
-                }
-            }
-        }
-
-        console.log('[RESUME_RAG] Container[' + idx + ']: "' + labelText.substring(0, 60) + '"');
-
-        // Determine what value to select
+    // Map field IDs to target values
+    inputs.forEach(input => {
+        const fieldId = input.id || '';
         let targetValue = null;
 
-        if (/have you ever worked|worked.*before|prior.*experience/i.test(labelText)) {
+        if (fieldId.includes('question_8433548005')) {
             targetValue = 'No';
-            console.log('[RESUME_RAG]   -> Prior experience question, select: No');
-        } else if (/authorized|legal.*work|right.*work|eligib|work.*country/i.test(labelText)) {
+        } else if (fieldId.includes('question_8433549005')) {
             targetValue = 'Yes';
-            console.log('[RESUME_RAG]   -> Work authorization question, select: Yes');
-        } else if (/visa|sponsor|require.*employ|h-?1|h-?1?b/i.test(labelText)) {
+        } else if (fieldId.includes('question_8433550005')) {
             targetValue = 'No';
-            console.log('[RESUME_RAG]   -> Visa question, select: No');
-        } else if (/acknowledge|agree|privacy|processing|data/i.test(labelText)) {
-            targetValue = 'Yes';
-            console.log('[RESUME_RAG]   -> Acknowledgement question, select: Yes');
-        } else if (/country|nation|location/i.test(labelText)) {
-            targetValue = 'United States';
-            console.log('[RESUME_RAG]   -> Country question, select: United States');
+        } else if (fieldId.includes('question_8433551005')) {
+            targetValue = 'acknowledge';
+        } else if (fieldId === '4014696005') {
+            targetValue = 'Male';
+        } else if (fieldId === '4014697005') {
+            targetValue = 'White';
+        } else if (fieldId === '4014698005') {
+            targetValue = 'No';
         }
 
         if (targetValue) {
-            const clickable = container.querySelector('[class*="select-shell"], button, [role="button"], input, select');
+            dropdownConfig[fieldId] = targetValue;
+        }
+    });
 
-            if (clickable) {
-                console.log('[RESUME_RAG]   Found clickable: ' + clickable.tagName);
+    console.log('[RESUME_RAG] Configured dropdowns:', Object.keys(dropdownConfig).length);
 
-                // Try method 1: If it's a SELECT element, just set the value directly
-                if (clickable.tagName === 'SELECT') {
-                    console.log('[RESUME_RAG]   Native SELECT, setting value directly');
-                    for (const opt of clickable.options || []) {
-                        if (opt.text === targetValue) {
-                            clickable.value = opt.value;
-                            clickable.dispatchEvent(new Event('change', { bubbles: true }));
-                            return;
-                        }
-                    }
+    // Process each dropdown sequentially
+    for (const [fieldId, targetValue] of Object.entries(dropdownConfig)) {
+        const input = document.querySelector(`input#${CSS.escape(fieldId)}`);
+        if (!input) continue;
+
+        console.log('[RESUME_RAG] Dropdown: ' + fieldId + ' -> ' + targetValue);
+
+        // Click to open
+        input.click();
+        await sleep(500);
+
+        // Navigate to target using arrow keys and detect focused option
+        let found = false;
+        for (let arrowCount = 0; arrowCount < 20; arrowCount++) {
+            if (arrowCount > 0) {
+                simulateKeyPress('ArrowDown', input);
+                await sleep(80);
+            }
+
+            // Check focused option text
+            const focusedOption = document.querySelector('div.select__option--is-focused');
+            if (focusedOption) {
+                const focusedText = focusedOption.textContent?.trim() || '';
+                if (targetValue.toLowerCase().includes(focusedText.toLowerCase()) ||
+                    focusedText.toLowerCase().includes(targetValue.toLowerCase())) {
+                    console.log('[RESUME_RAG]   ✓ Found "' + targetValue + '" at arrow ' + arrowCount);
+                    found = true;
+                    break;
                 }
+            }
+        }
 
-                // Try method 2: Use keyboard navigation
-                console.log('[RESUME_RAG]   Using keyboard to select option');
+        if (!found) {
+            console.log('[RESUME_RAG]   ⚠ Did not find "' + targetValue + '" after 20 tries');
+        }
 
-                // Send arrow down key to move to first option
-                let downEvent = new KeyboardEvent('keydown', {
-                    key: 'ArrowDown',
-                    code: 'ArrowDown',
-                    keyCode: 40,
-                    bubbles: true,
-                    cancelable: true
-                });
+        // Press Enter to select
+        simulateKeyPress('Enter', input);
+        await sleep(400);
+    }
 
-                clickable.dispatchEvent(downEvent);
+    console.log('[RESUME_RAG] Dropdown processing complete');
+}
 
-                // Give it time to respond to keyboard
-                setTimeout(() => {
-                    // Now look for visible Yes/No buttons anywhere on the page
-                    const allText = Array.from(document.querySelectorAll('*')).filter(el => {
-                        const text = el.textContent?.trim() || '';
-                        // Get computed style to check if visible
-                        const style = window.getComputedStyle(el);
-                        const isVisible = style.display !== 'none' && style.visibility !== 'hidden';
-                        return (text === 'Yes' || text === 'No') && isVisible && el.offsetHeight > 0;
-                    });
+function simulateKeyPress(key, target) {
+    const keyEvent = new KeyboardEvent('keydown', {
+        key: key,
+        code: key,
+        bubbles: true,
+        cancelable: true
+    });
+    target.dispatchEvent(keyEvent);
+}
 
-                    console.log('[RESUME_RAG]   Found ' + allText.length + ' visible Yes/No elements on page');
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
 
-                    if (allText.length > 0) {
-                        // Find the one that matches our target
-                        let found = false;
-                        for (const el of allText) {
-                            const text = el.textContent?.trim() || '';
-                            if (text === targetValue) {
-                                console.log('[RESUME_RAG]   ✓ Found visible "' + targetValue + '", clicking it');
-                                el.click();
-                                found = true;
-                                break;
-                            }
-                        }
+function captureFormData() {
+    const data = {};
 
-                        if (!found) {
-                            console.log('[RESUME_RAG]   Found Yes/No elements but not "' + targetValue + '", trying first one');
-                            allText[0].click();
-                        }
-                    } else {
-                        console.log('[RESUME_RAG]   No visible Yes/No elements found');
+    // Capture all text inputs
+    document.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"], textarea').forEach(field => {
+        if (field.id && field.value) {
+            data[field.id] = field.value;
+        }
+    });
 
-                        // Fallback: Try to find and click by text using querySelector
-                        const xpath = "//*[text()='" + targetValue + "']";
-                        console.log('[RESUME_RAG]   Trying XPath approach...');
-
-                        // Just close the dropdown
-                        const esc = new KeyboardEvent('keydown', {
-                            key: 'Escape',
-                            code: 'Escape',
-                            keyCode: 27,
-                            bubbles: true
-                        });
-                        clickable.dispatchEvent(esc);
-                    }
-                }, 200);
+    // Capture all selects and comboboxes
+    document.querySelectorAll('input[role="combobox"], select').forEach(field => {
+        if (field.id) {
+            const value = field.value || '';
+            if (value) {
+                data[field.id] = value;
+            } else {
+                // For React Select, try to read the visible value
+                const container = field.closest('[class*="select"]');
+                const valueSpan = container?.querySelector('.select__single-value');
+                if (valueSpan && valueSpan.textContent?.trim()) {
+                    data[field.id] = valueSpan.textContent.trim();
+                }
             }
         }
     });
+
+    // Capture checked checkboxes
+    document.querySelectorAll('input[type="checkbox"]:checked').forEach(field => {
+        if (field.id) {
+            data[field.id] = true;
+        }
+    });
+
+    return data;
 }

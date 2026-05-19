@@ -37,14 +37,15 @@ document.getElementById('fillButton').addEventListener('click', async () => {
         // Set a timeout to show a default message if no response
         const timeout = setTimeout(() => {
             if (!responseReceived) {
-                console.log('[POPUP] No response received after 3 seconds');
-                showStatus('✓ Form filled! (Check the form to verify)', 'success');
+                console.log('[POPUP] No response received after 5 seconds');
+                showStatus('✓ Form filled! Dropdowns processing...', 'success');
             }
-        }, 3000);
+        }, 5000);
 
         chrome.tabs.sendMessage(tab.id, {
             action: 'fillForm',
-            resumeData: resumeData
+            resumeData: resumeData,
+            backendUrl: backendUrl
         }, (response) => {
             clearTimeout(timeout);
             responseReceived = true;
