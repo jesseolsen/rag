@@ -129,6 +129,7 @@ async function fillForm(resumeData) {
 
         // CHECKBOXES
         if (type === 'checkbox') {
+            console.log('[RESUME_RAG] Found checkbox:', id, '| context:', context);
             if (/linkedin/.test(context)) {
                 console.log('[RESUME_RAG] Checking LinkedIn checkbox');
                 field.checked = true;
@@ -136,6 +137,13 @@ async function fillForm(resumeData) {
                 field.dispatchEvent(new Event('click', { bubbles: true }));
                 filledCount++;
                 console.log('[RESUME_RAG] Filled checkbox, count now:', filledCount);
+            } else if (/acknowledge|agree|privacy|policy|data.?processing/i.test(context)) {
+                console.log('[RESUME_RAG] Checking acknowledgement checkbox');
+                field.checked = true;
+                field.dispatchEvent(new Event('change', { bubbles: true }));
+                field.dispatchEvent(new Event('click', { bubbles: true }));
+                filledCount++;
+                console.log('[RESUME_RAG] Filled acknowledgement checkbox, count now:', filledCount);
             }
             return;
         }
@@ -165,6 +173,11 @@ async function fillForm(resumeData) {
 
         // TEXT INPUTS
         if (type === 'text' || type === '' || type === 'email' || type === 'tel' || field.tagName === 'TEXTAREA') {
+            // Skip location field - it's handled as a dropdown in handleDropdowns()
+            if (id === 'candidate-location') {
+                return;
+            }
+
             let value = null;
 
             if (/last.?name|lname|surname/i.test(context)) {
@@ -175,7 +188,7 @@ async function fillForm(resumeData) {
                 value = data.email;
             } else if (/phone|telephone|mobile|cell/i.test(context)) {
                 value = data.phone;
-            } else if (/^city|location_city/i.test(context) && !/address|zip|postal/i.test(context)) {
+            } else if (/city|location|location.?city/i.test(context) && !/address|zip|postal|country/i.test(context)) {
                 value = data.city;
             } else if (/linkedin/i.test(context)) {
                 value = data.linkedin;
@@ -295,6 +308,73 @@ async function handleDropdowns() {
         await sleep(400);
         processedCount++;
         console.log('[RESUME_RAG] ✓ Country selected');
+    }
+
+    // Handle location (city) dropdown
+    console.log('[RESUME_RAG] Processing location dropdown');
+    const locationInput = document.querySelector('input#candidate-location');
+    if (locationInput) {
+        console.log('[RESUME_RAG] Found location input');
+        locationInput.focus();
+        await sleep(300);
+
+        // Clear any existing value first
+        console.log('[RESUME_RAG]   Clearing existing value');
+        locationInput.value = '';
+        locationInput.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(200);
+
+        // Press DOWN to open the dropdown
+        console.log('[RESUME_RAG]   Pressing DOWN to open dropdown');
+        const downEvent = new KeyboardEvent('keydown', {
+            key: 'ArrowDown',
+            code: 'ArrowDown',
+            bubbles: true,
+            cancelable: true
+        });
+        locationInput.dispatchEvent(downEvent);
+        await sleep(500);
+
+        // Type "Spanish Fork" to filter to Spanish Fork, Utah
+        console.log('[RESUME_RAG]   Typing "Spanish Fork" character by character');
+        const locationText = 'Spanish Fork';
+        for (const char of locationText) {
+            locationInput.value += char;
+
+            const keydownEvent = new KeyboardEvent('keydown', {
+                key: char,
+                bubbles: true,
+                cancelable: true
+            });
+            locationInput.dispatchEvent(keydownEvent);
+
+            const inputEvent = new Event('input', { bubbles: true });
+            locationInput.dispatchEvent(inputEvent);
+
+            const keyupEvent = new KeyboardEvent('keyup', {
+                key: char,
+                bubbles: true,
+                cancelable: true
+            });
+            locationInput.dispatchEvent(keyupEvent);
+
+            await sleep(80);
+        }
+
+        await sleep(600);
+
+        // Press Enter to select Spanish Fork
+        console.log('[RESUME_RAG]   Pressing Enter to select');
+        const enterEvent = new KeyboardEvent('keydown', {
+            key: 'Enter',
+            code: 'Enter',
+            bubbles: true,
+            cancelable: true
+        });
+        locationInput.dispatchEvent(enterEvent);
+        await sleep(400);
+        processedCount++;
+        console.log('[RESUME_RAG] ✓ Location selected');
     }
 
     // Find all React Select combobox inputs
