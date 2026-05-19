@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from datetime import datetime
 from uuid import UUID
 import enum
-from typing import Optional
+from typing import Optional, Dict, Any
 
 
 class ResumeStatus(str, enum.Enum):
@@ -86,3 +86,21 @@ class ResumeDataResponse(BaseModel):
     education: list = []
     skills: list = []
     projects: list = []
+
+
+class FormResponseRequest(BaseModel):
+    url: str
+    timestamp: datetime
+    data: Dict[str, Any]
+    source: str = "extension"
+
+
+class FormResponseResponse(BaseModel):
+    id: str
+    url: str
+    form_data: Dict[str, Any]
+    submitted_at: datetime
+    source: str
+
+    class Config:
+        from_attributes = True

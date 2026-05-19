@@ -35,3 +35,13 @@ class ResumeSectionChunk(Base):
     embedding = Column(JSON, nullable=True)  # Store as JSON array for SQLite compatibility
     chunk_index = Column(Integer, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class FormResponse(Base):
+    __tablename__ = "form_responses"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    url = Column(Text, nullable=False)
+    form_data = Column(JSON, nullable=False)
+    submitted_at = Column(DateTime(timezone=True), server_default=func.now())
+    source = Column(String(50), default="extension")  # "extension" or "playwright"
