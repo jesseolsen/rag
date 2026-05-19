@@ -15,18 +15,26 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             console.log('[RESUME_RAG] Backend URL set to:', request.backendUrl);
         }
 
-        const result = fillForm(request.resumeData);
-        window.RESUME_RAG_LAST_RESULT = result;
-        console.log('[RESUME_RAG] Final result:', result);
-        console.log('[RESUME_RAG] Stored result globally');
+        // Handle async fillForm and send response when done
+        fillForm(request.resumeData).then(result => {
+            window.RESUME_RAG_LAST_RESULT = result;
+            console.log('[RESUME_RAG] Final result:', result);
+            console.log('[RESUME_RAG] Stored result globally');
 
-        // Send response synchronously
-        try {
-            sendResponse(result);
-            console.log('[RESUME_RAG] Response sent');
-        } catch (e) {
-            console.log('[RESUME_RAG] Error sending response:', e);
-        }
+            // Send response when async work is done
+            try {
+                sendResponse(result);
+                console.log('[RESUME_RAG] Response sent');
+            } catch (e) {
+                console.log('[RESUME_RAG] Error sending response:', e);
+            }
+        }).catch(error => {
+            console.log('[RESUME_RAG] Error in fillForm:', error);
+            sendResponse({ success: false, message: error.message });
+        });
+
+        // Return true to keep the channel open for async response
+        return true;
     }
 });
 
@@ -59,7 +67,7 @@ document.addEventListener('submit', async (e) => {
     }
 }, true);
 
-function fillForm(resumeData) {
+async function fillForm(resumeData) {
     console.log('[RESUME_RAG] Starting form fill');
 
     const data = {
