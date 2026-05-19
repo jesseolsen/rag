@@ -340,42 +340,59 @@ class GreenhouseAutomation:
                     await input_elem.click()
                     await asyncio.sleep(0.5)
 
-                    # Determine how many times to press ArrowDown based on field type
-                    arrow_presses = 0
-
-                    # Identify field by ID and determine arrow presses
-                    arrow_presses = 0
+                    # Determine target value based on field ID
+                    target_value = None
                     if 'question_8433548005' in field_id:
-                        arrow_presses = 2
-                        logger.info(f"    Prior employment → No")
+                        target_value = 'No'
+                        logger.info(f"    Targeting: No")
                     elif 'question_8433549005' in field_id:
-                        arrow_presses = 1
-                        logger.info(f"    Authorization → Yes")
+                        target_value = 'Yes'
+                        logger.info(f"    Targeting: Yes")
                     elif 'question_8433550005' in field_id:
-                        arrow_presses = 2
-                        logger.info(f"    Visa sponsorship → No")
+                        target_value = 'No'
+                        logger.info(f"    Targeting: No")
                     elif 'question_8433551005' in field_id:
-                        arrow_presses = 1
-                        logger.info(f"    Acknowledgement → I acknowledge")
+                        target_value = 'acknowledge'
+                        logger.info(f"    Targeting: acknowledge")
                     elif field_id == '4014696005':
-                        arrow_presses = 0
-                        logger.info(f"    Gender → Male")
+                        target_value = 'Male'
+                        logger.info(f"    Targeting: Male")
                     elif field_id == '4014697005':
-                        arrow_presses = 4
-                        logger.info(f"    Race → White")
+                        target_value = 'White'
+                        logger.info(f"    Targeting: White")
                     elif field_id == '4014698005':
-                        arrow_presses = 2
-                        logger.info(f"    Military → No")
+                        target_value = 'No'
+                        logger.info(f"    Targeting: No")
 
-                    # Press ArrowDown the appropriate number of times
-                    for _ in range(arrow_presses):
-                        await self.page.keyboard.press('ArrowDown')
-                        await asyncio.sleep(0.15)
+                    # Navigate to target option using arrow keys
+                    if target_value:
+                        found = False
+                        for arrow_count in range(20):
+                            if arrow_count > 0:
+                                await self.page.keyboard.press('ArrowDown')
+                                await asyncio.sleep(0.08)
+
+                            # Check visible focused option text
+                            focused_text = await self.page.evaluate("""
+                                () => {
+                                    const focused = document.querySelector('div.select__option--is-focused');
+                                    if (!focused) return '';
+                                    return focused.textContent?.trim() || '';
+                                }
+                            """)
+
+                            if target_value.lower() in focused_text.lower():
+                                logger.info(f"    ✓ Found '{target_value}' at press {arrow_count}")
+                                found = True
+                                break
+
+                        if not found:
+                            logger.info(f"    ⚠ Did not find '{target_value}' after 20 tries, selecting current")
 
                     # Press Enter to select
                     logger.info(f"  Pressing Enter...")
                     await self.page.keyboard.press('Enter')
-                    await asyncio.sleep(0.3)
+                    await asyncio.sleep(0.4)
 
                     counts['dropdowns'] += 1
                     logger.info(f"  ✓ Dropdown {i + 1} selected")
