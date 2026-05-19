@@ -136,12 +136,12 @@ async function fillForm(resumeData) {
                 field.dispatchEvent(new Event('click', { bubbles: true }));
                 filledCount++;
                 console.log('[RESUME_RAG] ✓ Checked LinkedIn');
-            } else if (/acknowledge|agree|privacy|policy|data.?processing/i.test(context)) {
+            } else if (/acknowledge|agree|privacy|policy|data.?processing|checking|consent/i.test(context)) {
                 field.checked = true;
                 field.dispatchEvent(new Event('change', { bubbles: true }));
                 field.dispatchEvent(new Event('click', { bubbles: true }));
                 filledCount++;
-                console.log('[RESUME_RAG] ✓ Checked Acknowledgement');
+                console.log('[RESUME_RAG] ✓ Checked Consent/Acknowledgement');
             }
             return;
         }
@@ -363,8 +363,7 @@ async function handleDropdowns() {
             await sleep(30);
         }
 
-        console.log('[RESUME_RAG] Typed Spanish Fork, waiting 3 seconds for dropdown to settle...');
-        await sleep(3000);
+        await sleep(150);
 
         // Press Enter to select Spanish Fork
         const enterEvent = new KeyboardEvent('keydown', {
