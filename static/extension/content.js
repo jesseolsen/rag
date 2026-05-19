@@ -202,12 +202,14 @@ function fillForm(resumeData) {
 
     // Handle Greenhouse custom dropdowns (asynchronously)
     console.log('[RESUME_RAG] Processing custom dropdown components');
-    handleDropdowns().then(() => {
-        console.log('[RESUME_RAG] Total filled:', filledCount);
-        console.log('%cFORM FILLED: ' + filledCount + ' fields', 'font-size: 16px; color: green; font-weight: bold;');
-    });
 
-    return { success: true, filledCount };
+    // Return promise that completes after dropdowns are processed
+    return handleDropdowns().then((dropdownCount) => {
+        const totalFilled = filledCount + dropdownCount;
+        console.log('[RESUME_RAG] Total filled:', totalFilled);
+        console.log('%cFORM FILLED: ' + totalFilled + ' fields', 'font-size: 16px; color: green; font-weight: bold;');
+        return { success: true, filledCount: totalFilled };
+    });
 }
 
 async function handleDropdowns() {
@@ -246,6 +248,8 @@ async function handleDropdowns() {
     });
 
     console.log('[RESUME_RAG] Configured dropdowns:', Object.keys(dropdownConfig).length);
+
+    let processedCount = 0;
 
     // Process each dropdown sequentially
     for (const [fieldId, targetValue] of Object.entries(dropdownConfig)) {
@@ -286,9 +290,11 @@ async function handleDropdowns() {
         // Press Enter to select
         simulateKeyPress('Enter', input);
         await sleep(400);
+        processedCount++;
     }
 
-    console.log('[RESUME_RAG] Dropdown processing complete');
+    console.log('[RESUME_RAG] Dropdown processing complete. Processed: ' + processedCount);
+    return processedCount;
 }
 
 function simulateKeyPress(key, target) {

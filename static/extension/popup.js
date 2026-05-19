@@ -34,13 +34,13 @@ document.getElementById('fillButton').addEventListener('click', async () => {
         console.log('Sending message to content script...');
         let responseReceived = false;
 
-        // Set a timeout to show a default message if no response
+        // Set a timeout - dropdown processing takes time
         const timeout = setTimeout(() => {
             if (!responseReceived) {
-                console.log('[POPUP] No response received after 5 seconds');
-                showStatus('✓ Form filled! Dropdowns processing...', 'success');
+                console.log('[POPUP] No response after 10 seconds, showing default message');
+                showStatus('✓ Form filled! (Processing dropdowns...)', 'success');
             }
-        }, 5000);
+        }, 10000);
 
         chrome.tabs.sendMessage(tab.id, {
             action: 'fillForm',
@@ -64,8 +64,9 @@ document.getElementById('fillButton').addEventListener('click', async () => {
             console.log('[POPUP] Response.filledCount:', response?.filledCount);
 
             if (response && response.success) {
-                console.log('[POPUP] Showing success with count:', response.filledCount);
-                showStatus(`✓ Form filled! Matched ${response.filledCount} fields.`, 'success');
+                const count = response.filledCount || 0;
+                console.log('[POPUP] Showing success with count:', count);
+                showStatus(`✓ Form filled! Matched ${count} fields.`, 'success');
             } else {
                 console.log('[POPUP] Response was not successful');
                 showStatus(response?.message || 'Failed to fill form', 'error');
