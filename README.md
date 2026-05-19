@@ -2,6 +2,12 @@
 
 A Chrome extension that automatically fills job application forms with your resume data, plus a backend API for generating tailored cover letters and responses.
 
+## Screenshots
+
+<img width="872" height="558" alt="image" src="https://github.com/user-attachments/assets/b8241a16-cbfb-4230-8015-cc62f9d471fd" />
+
+<img width="866" height="860" alt="image" src="https://github.com/user-attachments/assets/e4f62216-66e0-4064-bde0-8440050aa40f" />
+
 ## Quick Start
 
 ### Chrome Extension (Primary Use Case)
