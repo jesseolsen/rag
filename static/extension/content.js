@@ -363,7 +363,8 @@ async function handleDropdowns() {
             await sleep(30);
         }
 
-        await sleep(150);
+        console.log('[RESUME_RAG] Typed Spanish Fork, waiting for dropdown to render...');
+        await sleep(1000);
 
         // Press Enter to select Spanish Fork
         const enterEvent = new KeyboardEvent('keydown', {
