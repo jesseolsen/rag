@@ -359,6 +359,15 @@ async function handleDropdowns() {
             cancelable: true
         });
         locationInput.dispatchEvent(enterEvent);
+
+        const enterEventUp = new KeyboardEvent('keyup', {
+            key: 'Enter',
+            code: 'Enter',
+            bubbles: true,
+            cancelable: true
+        });
+        locationInput.dispatchEvent(enterEventUp);
+
         await sleep(150);
         processedCount++;
     }
