@@ -165,6 +165,41 @@ class GreenhouseAutomation:
             logger.debug(f"✗ Could not select Yes/No dropdown: {e}")
             return False
 
+    async def select_country(self, country_name: str = "United States") -> bool:
+        """Select country from the country dropdown"""
+        if not self.page:
+            return False
+
+        try:
+            # Find the country input (has role combobox but isn't a question field)
+            country_input = await self.page.query_selector('input#country[role="combobox"]')
+            if not country_input:
+                logger.debug("Country input not found")
+                return False
+
+            # Click to open
+            await country_input.click()
+            await asyncio.sleep(0.3)
+
+            # Type the country name to filter
+            await self.page.keyboard.type(country_name)
+            await asyncio.sleep(0.3)
+
+            # Press ArrowDown to highlight first match
+            await self.page.keyboard.press('ArrowDown')
+            await asyncio.sleep(0.2)
+
+            # Press Enter to select
+            await self.page.keyboard.press('Enter')
+            await asyncio.sleep(0.3)
+
+            logger.info(f"✓ Selected country: {country_name}")
+            return True
+
+        except Exception as e:
+            logger.debug(f"✗ Could not select country: {e}")
+            return False
+
     async def fill_resume_data(self, resume_data: Dict[str, Any]) -> Dict[str, int]:
         """
         Fill form with resume data
@@ -206,7 +241,7 @@ class GreenhouseAutomation:
 
         logger.info(f"Total form elements: {len(inputs)}")
 
-        # First pass: Fill text fields and checkboxes
+        # First pass: Fill text fields, country, and checkboxes
         for field in inputs:
             try:
                 field_type = await field.get_attribute('type')
@@ -245,41 +280,40 @@ class GreenhouseAutomation:
                     except Exception as e:
                         logger.debug(f"✗ Error filling field: {e}")
 
-            # CHECKBOXES
+            # CHECKBOXES - check all checkboxes (except reCAPTCHA)
             elif field_type == 'checkbox':
-                if 'linkedin' in context:
+                if 'recaptcha' not in context.lower():
                     try:
                         await field.check()
                         counts['checkboxes'] += 1
-                        logger.info("✓ Checked LinkedIn checkbox")
+                        logger.info(f"✓ Checked checkbox: {field_id}")
                     except Exception as e:
                         logger.debug(f"✗ Error checking checkbox: {e}")
 
         # Second pass: Handle dropdown selects using the actual input element
-        logger.info("\nHandling dropdown questions...")
+        logger.info("\nHandling all dropdown questions...")
 
         try:
             # Find all combobox inputs (these are the actual select controls)
-            # These Yes/No dropdowns come AFTER the "How did you hear about us?" section
-            # We look for inputs that appear after we scroll past the initial questions
             inputs = await self.page.query_selector_all('input[role="combobox"]')
             logger.info(f"Found {len(inputs)} total combobox inputs")
 
-            # Filter for the ones that have Yes/No options (skip the first ones like country selector)
-            # They appear near labels containing Coalition or visa questions
-            yes_no_inputs = []
+            # Filter for question/demographic dropdowns (skip country, location, search input)
+            question_inputs = []
             for inp in inputs:
                 try:
                     field_id = await inp.get_attribute('id') or ''
-                    if field_id and 'question' in field_id.lower():
-                        yes_no_inputs.append(inp)
+                    # Include anything that's a question OR a numeric ID (demographics)
+                    # Exclude: country, iti-* (intl phone), candidate-location
+                    if field_id and field_id not in ['country', 'candidate-location'] and not field_id.startswith('iti-'):
+                        question_inputs.append(inp)
                 except:
                     pass
 
-            logger.info(f"Found {len(yes_no_inputs)} Yes/No dropdowns")
+            logger.info(f"Found {len(question_inputs)} question/demographic dropdowns")
 
-            # Process the first 4 Yes/No dropdowns
-            for i, input_elem in enumerate(yes_no_inputs[:4]):
+            # Process all question dropdowns
+            for i, input_elem in enumerate(question_inputs):
                 try:
                     logger.info(f"Dropdown {i + 1}: Processing...")
 
@@ -309,7 +343,7 @@ class GreenhouseAutomation:
                     logger.info(f"Dropdown {i + 1} error: {type(e).__name__}: {e}")
                     continue
 
-            logger.info(f"Completed {counts['dropdowns']} dropdowns")
+            logger.info(f"Completed {counts['dropdowns']} out of {len(question_inputs)} dropdowns")
 
         except Exception as e:
             logger.debug(f"Dropdown processing error: {e}")
@@ -381,8 +415,15 @@ async def main():
 
         # Fill form
         if resume_data:
+            # First, fill all text fields and checkboxes
             counts = await automation.fill_resume_data(resume_data)
-            logger.info(f"✓ Form filled: {counts}")
+            logger.info(f"✓ Text fields and checkboxes: {counts}")
+
+            # Then select country
+            await automation.select_country(resume_data.get('country', 'United States'))
+
+            # Then handle all Yes/No and other dropdowns
+            logger.info("Form filled completely")
 
         # Take screenshot
         if args.screenshot:
