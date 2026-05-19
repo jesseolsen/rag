@@ -34,13 +34,9 @@ document.getElementById('fillButton').addEventListener('click', async () => {
         console.log('Sending message to content script...');
         let responseReceived = false;
 
-        // Set a timeout - form filling can take time
-        const timeout = setTimeout(() => {
-            if (!responseReceived) {
-                console.log('[POPUP] No response after 30 seconds, showing timeout message');
-                showStatus('Form processing (this may take a moment)...', 'info');
-            }
-        }, 30000);
+        // Show processing message but don't set a timeout that would show an early result
+        status.textContent = 'Filling in fields...';
+        status.className = 'status info';
 
         chrome.tabs.sendMessage(tab.id, {
             action: 'fillForm',
@@ -52,7 +48,6 @@ document.getElementById('fillButton').addEventListener('click', async () => {
                 return;
             }
 
-            clearTimeout(timeout);
             responseReceived = true;
 
             console.log('[POPUP] Got response:', response);
@@ -72,12 +67,8 @@ document.getElementById('fillButton').addEventListener('click', async () => {
                 const count = response.filledCount || 0;
                 console.log('[POPUP] Response details:', JSON.stringify(response));
                 console.log('[POPUP] Count extracted:', count);
-                console.log('[POPUP] Showing success with count:', count);
-                if (count > 0) {
-                    showStatus(`✓ Form filled! Matched ${count} fields.`, 'success');
-                } else {
-                    showStatus('✓ Form ready. Manually complete the dropdowns.', 'success');
-                }
+                console.log('[POPUP] Form fill complete with', count, 'fields');
+                // Don't show the response here - wait for the formFillComplete message instead
             } else {
                 console.log('[POPUP] Response was not successful:', response);
                 showStatus(response?.message || 'Failed to fill form', 'error');
@@ -94,6 +85,18 @@ function showStatus(message, type) {
     status.textContent = message;
     status.className = `status ${type}`;
 }
+
+// Listen for form fill completion messages from content script
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === 'formFillComplete') {
+        console.log('[POPUP] Form fill complete with', request.filledCount, 'fields');
+        const status = document.getElementById('status');
+        if (status) {
+            status.textContent = `Form filled: ${request.filledCount} fields`;
+            status.className = 'status success';
+        }
+    }
+});
 
 // Load saved settings on popup open
 chrome.storage.local.get(['backendUrl'], (result) => {

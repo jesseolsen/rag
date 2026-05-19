@@ -214,6 +214,19 @@ async function fillForm(resumeData) {
         const totalFilled = filledCount + dropdownCount;
         console.log('[RESUME_RAG] Total filled:', totalFilled);
         console.log('%cFORM FILLED: ' + totalFilled + ' fields', 'font-size: 16px; color: green; font-weight: bold;');
+
+        // Send message to popup to update status with final count (only if we actually filled something)
+        if (totalFilled > 0) {
+            try {
+                chrome.runtime.sendMessage({
+                    action: 'formFillComplete',
+                    filledCount: totalFilled
+                });
+            } catch (e) {
+                console.log('[RESUME_RAG] Could not send formFillComplete message:', e.message);
+            }
+        }
+
         return { success: true, filledCount: totalFilled };
     });
 }
