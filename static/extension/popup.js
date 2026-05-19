@@ -65,10 +65,12 @@ document.getElementById('fillButton').addEventListener('click', async () => {
 
             if (response && response.success) {
                 const count = response.filledCount || 0;
+                console.log('[POPUP] Response details:', JSON.stringify(response));
+                console.log('[POPUP] Count extracted:', count);
                 console.log('[POPUP] Showing success with count:', count);
                 showStatus(`✓ Form filled! Matched ${count} fields.`, 'success');
             } else {
-                console.log('[POPUP] Response was not successful');
+                console.log('[POPUP] Response was not successful:', response);
                 showStatus(response?.message || 'Failed to fill form', 'error');
             }
         });
