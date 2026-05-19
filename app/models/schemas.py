@@ -104,3 +104,31 @@ class FormResponseResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class FormFieldAnswerRequest(BaseModel):
+    resume_id: Optional[str] = None
+    question_text: str
+    answer_text: str
+    field_type: str = "text"
+    field_id: Optional[str] = None
+
+
+class FormFieldAnswerResponse(BaseModel):
+    id: str
+    resume_id: Optional[str]
+    question_keywords: str
+    question_text: str
+    answer_text: str
+    field_type: str
+    created_at: datetime
+    last_used_at: Optional[datetime]
+    use_count: int
+
+    class Config:
+        from_attributes = True
+
+
+class FormFieldAnswerListResponse(BaseModel):
+    answers: list[FormFieldAnswerResponse]
+    count: int

@@ -30,7 +30,8 @@ Resume RAG is a Retrieval-Augmented Generation (RAG) system that:
          ▼
 ┌──────────────────────┐
 │ Generate Embeddings  │
-│ (OpenAI, 1536-dim)   │
+│ (Sentence Transform, │
+│  all-MiniLM, 384-dim)│
 └────────┬─────────────┘
          │
          ▼
@@ -88,11 +89,11 @@ Application Request:
 **Files**: `services/embeddings.py`
 
 **Process**:
-- Use OpenAI text-embedding-3-small (1536 dimensions)
+- Use Sentence Transformers all-MiniLM-L6-v2 (384 dimensions, local)
 - Generate embeddings for each chunk
 - Store in PostgreSQL with pgvector
 
-**Cost**: ~$0.01-0.05 per resume (all chunks embedded once)
+**Cost**: Free (local model, no API calls)
 
 ### 3. Semantic Search
 **Files**: `services/search.py`
@@ -245,7 +246,7 @@ Chosen over GPT-4 because:
 |-----------|--------|-----------|
 | Framework | FastAPI | Async, modern, great for RAG |
 | Database | PostgreSQL | pgvector native support, reliable |
-| Embeddings | OpenAI | Quality, pricing, reliability |
+| Embeddings | Sentence Transformers | Fast, local (no API), 384-dim |
 | Generation | Claude | Best synthesis, large context |
 | Vector Search | pgvector | No separate DB, efficient HNSW |
 | Chunking | Token-based | Precise, language-aware |
