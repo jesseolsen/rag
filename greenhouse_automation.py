@@ -280,15 +280,26 @@ class GreenhouseAutomation:
                     except Exception as e:
                         logger.debug(f"✗ Error filling field: {e}")
 
-            # CHECKBOXES - check only LinkedIn checkbox
+            # CHECKBOXES - check LinkedIn and consent checkboxes
             elif field_type == 'checkbox':
                 if 'recaptcha' not in context.lower():
+                    should_check = False
+                    checkbox_name = ''
+
                     # LinkedIn checkbox has ID ending in _21312271005
                     if 'question_8433547005' in field_id and '21312271005' in field_id:
+                        should_check = True
+                        checkbox_name = 'LinkedIn'
+                    # GDPR/consent checkbox
+                    elif 'gdpr_demographic' in field_id or 'consent' in context:
+                        should_check = True
+                        checkbox_name = 'Demographic Data Consent'
+
+                    if should_check:
                         try:
                             await field.check()
                             counts['checkboxes'] += 1
-                            logger.info(f"✓ Checked LinkedIn checkbox")
+                            logger.info(f"✓ Checked {checkbox_name} checkbox")
                         except Exception as e:
                             logger.debug(f"✗ Error checking checkbox: {e}")
 
@@ -333,41 +344,28 @@ class GreenhouseAutomation:
                     arrow_presses = 0
 
                     # Identify field by ID and determine arrow presses
-                    # For Yes/No questions: 0=Select, 1=Yes, 2=No
+                    arrow_presses = 0
                     if 'question_8433548005' in field_id:
-                        # "Have you ever worked for Coalition" - select "No" (1 press gives Yes, so need 2)
-                        # But screenshot shows it's backwards, so try 1
-                        arrow_presses = 1
-                        logger.info(f"    Field: Prior employment → selecting No")
+                        arrow_presses = 2
+                        logger.info(f"    Prior employment → No")
                     elif 'question_8433549005' in field_id:
-                        # "Are you authorized to lawfully work" - select "Yes"
-                        # But screenshot shows it's backwards, so try 2
-                        arrow_presses = 2
-                        logger.info(f"    Field: Authorization question → selecting Yes")
+                        arrow_presses = 1
+                        logger.info(f"    Authorization → Yes")
                     elif 'question_8433550005' in field_id:
-                        # "Do you require visa sponsorship" - select "No"
-                        # But screenshot shows it's backwards, so try 1
-                        arrow_presses = 1
-                        logger.info(f"    Field: Visa sponsorship → selecting No")
+                        arrow_presses = 2
+                        logger.info(f"    Visa sponsorship → No")
                     elif 'question_8433551005' in field_id:
-                        # "I acknowledge" - select first option (1 press for first option)
                         arrow_presses = 1
-                        logger.info(f"    Field: Acknowledgement → selecting first option")
+                        logger.info(f"    Acknowledgement → I acknowledge")
                     elif field_id == '4014696005':
-                        # Gender - try to select "Male" (probably 2nd or 3rd option)
-                        arrow_presses = 2
-                        logger.info(f"    Field: Gender → selecting Male")
-                    elif field_id == '4014697005':
-                        # Race/ethnicity - try to select "White" (probably 5th option)
-                        arrow_presses = 5
-                        logger.info(f"    Field: Race → selecting White")
-                    elif field_id == '4014698005':
-                        # Military - select "No" (2 presses)
-                        arrow_presses = 2
-                        logger.info(f"    Field: Military service → selecting No")
-                    else:
                         arrow_presses = 0
-                        logger.info(f"    Field: Unknown → selecting first option")
+                        logger.info(f"    Gender → Male")
+                    elif field_id == '4014697005':
+                        arrow_presses = 4
+                        logger.info(f"    Race → White")
+                    elif field_id == '4014698005':
+                        arrow_presses = 2
+                        logger.info(f"    Military → No")
 
                     # Press ArrowDown the appropriate number of times
                     for _ in range(arrow_presses):
