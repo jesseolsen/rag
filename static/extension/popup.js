@@ -34,19 +34,24 @@ document.getElementById('fillButton').addEventListener('click', async () => {
         console.log('Sending message to content script...');
         let responseReceived = false;
 
-        // Set a timeout - dropdown processing takes time
+        // Set a timeout - form filling can take time
         const timeout = setTimeout(() => {
             if (!responseReceived) {
-                console.log('[POPUP] No response after 10 seconds, showing default message');
-                showStatus('✓ Form filled! (Processing dropdowns...)', 'success');
+                console.log('[POPUP] No response after 30 seconds, showing timeout message');
+                showStatus('Form processing (this may take a moment)...', 'info');
             }
-        }, 10000);
+        }, 30000);
 
         chrome.tabs.sendMessage(tab.id, {
             action: 'fillForm',
             resumeData: resumeData,
             backendUrl: backendUrl
         }, (response) => {
+            if (responseReceived) {
+                console.log('[POPUP] Ignoring duplicate response');
+                return;
+            }
+
             clearTimeout(timeout);
             responseReceived = true;
 
@@ -68,7 +73,11 @@ document.getElementById('fillButton').addEventListener('click', async () => {
                 console.log('[POPUP] Response details:', JSON.stringify(response));
                 console.log('[POPUP] Count extracted:', count);
                 console.log('[POPUP] Showing success with count:', count);
-                showStatus(`✓ Form filled! Matched ${count} fields.`, 'success');
+                if (count > 0) {
+                    showStatus(`✓ Form filled! Matched ${count} fields.`, 'success');
+                } else {
+                    showStatus('✓ Form ready. Manually complete the dropdowns.', 'success');
+                }
             } else {
                 console.log('[POPUP] Response was not successful:', response);
                 showStatus(response?.message || 'Failed to fill form', 'error');

@@ -16,27 +16,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
 
         // Handle async fillForm and send response when done
-        const fillPromise = fillForm(request.resumeData);
-        console.log('[RESUME_RAG] fillForm returned promise:', typeof fillPromise, fillPromise instanceof Promise);
-
-        fillPromise.then(result => {
-            console.log('[RESUME_RAG] Promise resolved with result:', JSON.stringify(result));
-            window.RESUME_RAG_LAST_RESULT = result;
-            console.log('[RESUME_RAG] Final result:', result);
-            console.log('[RESUME_RAG] Stored result globally');
-
-            // Send response when async work is done
+        (async () => {
             try {
-                console.log('[RESUME_RAG] Calling sendResponse with:', JSON.stringify(result));
+                const result = await fillForm(request.resumeData);
+                console.log('[RESUME_RAG] fillForm completed with result:', JSON.stringify(result));
+                console.log('[RESUME_RAG] Sending response:', result);
                 sendResponse(result);
-                console.log('[RESUME_RAG] Response sent successfully');
-            } catch (e) {
-                console.log('[RESUME_RAG] Error sending response:', e.message);
+            } catch (error) {
+                console.log('[RESUME_RAG] fillForm error:', error.message);
+                sendResponse({ success: false, message: error.message });
             }
-        }).catch(error => {
-            console.log('[RESUME_RAG] Promise rejected with error:', error.message);
-            sendResponse({ success: false, message: error.message });
-        });
+        })();
 
         // Return true to keep the channel open for async response
         return true;
@@ -74,6 +64,7 @@ document.addEventListener('submit', async (e) => {
 
 async function fillForm(resumeData) {
     console.log('[RESUME_RAG] Starting form fill');
+    console.log('[RESUME_RAG] resumeData received:', JSON.stringify(resumeData));
 
     const data = {
         first: resumeData.first_name || '',
@@ -85,6 +76,7 @@ async function fillForm(resumeData) {
         website: resumeData.website || ''
     };
 
+    console.log('[RESUME_RAG] Data object created:', JSON.stringify(data));
     let filledCount = 0;
 
     // Get all input elements from main page AND iframes
@@ -143,6 +135,7 @@ async function fillForm(resumeData) {
                 field.dispatchEvent(new Event('change', { bubbles: true }));
                 field.dispatchEvent(new Event('click', { bubbles: true }));
                 filledCount++;
+                console.log('[RESUME_RAG] Filled checkbox, count now:', filledCount);
             }
             return;
         }
@@ -205,7 +198,7 @@ async function fillForm(resumeData) {
                     }, 1500);
 
                     filledCount++;
-                    console.log('[RESUME_RAG] Filled:', name || id, 'with:', value.substring(0, 30));
+                    console.log('[RESUME_RAG] Filled:', name || id, 'with:', value.substring(0, 30), '| count now:', filledCount);
                 } catch (e) {
                     console.log('[RESUME_RAG] Error filling field:', e);
                 }
@@ -271,39 +264,50 @@ async function handleDropdowns() {
 
         console.log('[RESUME_RAG] Dropdown: ' + fieldId + ' -> ' + targetValue);
 
-        // Click to open
-        input.click();
+        // Focus the input
+        console.log('[RESUME_RAG]   Focusing input');
+        input.focus();
+        await sleep(200);
+
+        // Clear any existing value
+        input.value = '';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(100);
+
+        // Type the target value
+        console.log('[RESUME_RAG]   Typing "' + targetValue + '"');
+        input.value = targetValue;
+
+        // Dispatch input event to trigger React Select's filter
+        const inputEvent = new Event('input', { bubbles: true });
+        input.dispatchEvent(inputEvent);
+
+        const changeEvent = new Event('change', { bubbles: true });
+        input.dispatchEvent(changeEvent);
+
+        await sleep(600);
+
+        // Press Enter to select the first/only matching option
+        console.log('[RESUME_RAG]   Pressing Enter to select');
+        const enterEvent = new KeyboardEvent('keydown', {
+            key: 'Enter',
+            code: 'Enter',
+            bubbles: true,
+            cancelable: true
+        });
+        input.dispatchEvent(enterEvent);
+
+        const enterEventUp = new KeyboardEvent('keyup', {
+            key: 'Enter',
+            code: 'Enter',
+            bubbles: true,
+            cancelable: true
+        });
+        input.dispatchEvent(enterEventUp);
+
         await sleep(500);
-
-        // Navigate to target using arrow keys and detect focused option
-        let found = false;
-        for (let arrowCount = 0; arrowCount < 20; arrowCount++) {
-            if (arrowCount > 0) {
-                simulateKeyPress('ArrowDown', input);
-                await sleep(80);
-            }
-
-            // Check focused option text
-            const focusedOption = document.querySelector('div.select__option--is-focused');
-            if (focusedOption) {
-                const focusedText = focusedOption.textContent?.trim() || '';
-                if (targetValue.toLowerCase().includes(focusedText.toLowerCase()) ||
-                    focusedText.toLowerCase().includes(targetValue.toLowerCase())) {
-                    console.log('[RESUME_RAG]   ✓ Found "' + targetValue + '" at arrow ' + arrowCount);
-                    found = true;
-                    break;
-                }
-            }
-        }
-
-        if (!found) {
-            console.log('[RESUME_RAG]   ⚠ Did not find "' + targetValue + '" after 20 tries');
-        }
-
-        // Press Enter to select
-        simulateKeyPress('Enter', input);
-        await sleep(400);
         processedCount++;
+        console.log('[RESUME_RAG]   ✓ Processed dropdown');
     }
 
     console.log('[RESUME_RAG] Dropdown processing complete. Processed: ' + processedCount);
