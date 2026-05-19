@@ -16,20 +16,25 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
 
         // Handle async fillForm and send response when done
-        fillForm(request.resumeData).then(result => {
+        const fillPromise = fillForm(request.resumeData);
+        console.log('[RESUME_RAG] fillForm returned promise:', typeof fillPromise, fillPromise instanceof Promise);
+
+        fillPromise.then(result => {
+            console.log('[RESUME_RAG] Promise resolved with result:', JSON.stringify(result));
             window.RESUME_RAG_LAST_RESULT = result;
             console.log('[RESUME_RAG] Final result:', result);
             console.log('[RESUME_RAG] Stored result globally');
 
             // Send response when async work is done
             try {
+                console.log('[RESUME_RAG] Calling sendResponse with:', JSON.stringify(result));
                 sendResponse(result);
-                console.log('[RESUME_RAG] Response sent');
+                console.log('[RESUME_RAG] Response sent successfully');
             } catch (e) {
-                console.log('[RESUME_RAG] Error sending response:', e);
+                console.log('[RESUME_RAG] Error sending response:', e.message);
             }
         }).catch(error => {
-            console.log('[RESUME_RAG] Error in fillForm:', error);
+            console.log('[RESUME_RAG] Promise rejected with error:', error.message);
             sendResponse({ success: false, message: error.message });
         });
 
