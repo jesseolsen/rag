@@ -206,7 +206,7 @@ async function fillForm(resumeData) {
                     field.style.backgroundColor = '#ffffcc';
                     setTimeout(() => {
                         field.style.backgroundColor = oldBg;
-                    }, 500);
+                    }, 1500);
 
                     filledCount++;
                     console.log('[RESUME_RAG] Filled:', name || id, 'with:', value.substring(0, 30), '| count now:', filledCount);
@@ -251,7 +251,7 @@ async function handleDropdowns() {
     const countryInput = document.querySelector('input#country');
     if (countryInput) {
         countryInput.focus();
-        await sleep(50);
+        await sleep(100);
 
         // Press DOWN to open the dropdown
         const downEvent = new KeyboardEvent('keydown', {
@@ -261,12 +261,35 @@ async function handleDropdowns() {
             cancelable: true
         });
         countryInput.dispatchEvent(downEvent);
-        await sleep(80);
+        await sleep(200);
 
-        // Type "United" all at once to filter to United States
-        countryInput.value = 'United';
-        countryInput.dispatchEvent(new Event('input', { bubbles: true }));
-        await sleep(50);
+        // Type "United" character by character to filter to United States
+        console.log('[RESUME_RAG]   Typing "United" character by character');
+        const countryText = 'United';
+        for (const char of countryText) {
+            countryInput.value += char;
+
+            const keydownEvent = new KeyboardEvent('keydown', {
+                key: char,
+                bubbles: true,
+                cancelable: true
+            });
+            countryInput.dispatchEvent(keydownEvent);
+
+            const inputEvent = new Event('input', { bubbles: true });
+            countryInput.dispatchEvent(inputEvent);
+
+            const keyupEvent = new KeyboardEvent('keyup', {
+                key: char,
+                bubbles: true,
+                cancelable: true
+            });
+            countryInput.dispatchEvent(keyupEvent);
+
+            await sleep(30);
+        }
+
+        await sleep(200);
 
         // Press Enter to select United States
         const enterEvent = new KeyboardEvent('keydown', {
@@ -276,7 +299,7 @@ async function handleDropdowns() {
             cancelable: true
         });
         countryInput.dispatchEvent(enterEvent);
-        await sleep(80);
+        await sleep(150);
         processedCount++;
     }
 
@@ -284,11 +307,12 @@ async function handleDropdowns() {
     const locationInput = document.querySelector('input#candidate-location');
     if (locationInput) {
         locationInput.focus();
-        await sleep(50);
+        await sleep(100);
 
         // Clear any existing value first
         locationInput.value = '';
         locationInput.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(80);
 
         // Press DOWN to open the dropdown
         const downEvent = new KeyboardEvent('keydown', {
@@ -298,12 +322,34 @@ async function handleDropdowns() {
             cancelable: true
         });
         locationInput.dispatchEvent(downEvent);
-        await sleep(80);
+        await sleep(200);
 
-        // Type "Spanish Fork" all at once to filter to Spanish Fork, Utah
-        locationInput.value = 'Spanish Fork';
-        locationInput.dispatchEvent(new Event('input', { bubbles: true }));
-        await sleep(50);
+        // Type "Spanish Fork" to filter to Spanish Fork, Utah
+        const locationText = 'Spanish Fork';
+        for (const char of locationText) {
+            locationInput.value += char;
+
+            const keydownEvent = new KeyboardEvent('keydown', {
+                key: char,
+                bubbles: true,
+                cancelable: true
+            });
+            locationInput.dispatchEvent(keydownEvent);
+
+            const inputEvent = new Event('input', { bubbles: true });
+            locationInput.dispatchEvent(inputEvent);
+
+            const keyupEvent = new KeyboardEvent('keyup', {
+                key: char,
+                bubbles: true,
+                cancelable: true
+            });
+            locationInput.dispatchEvent(keyupEvent);
+
+            await sleep(30);
+        }
+
+        await sleep(200);
 
         // Press Enter to select Spanish Fork
         const enterEvent = new KeyboardEvent('keydown', {
@@ -313,7 +359,7 @@ async function handleDropdowns() {
             cancelable: true
         });
         locationInput.dispatchEvent(enterEvent);
-        await sleep(80);
+        await sleep(150);
         processedCount++;
     }
 
@@ -365,7 +411,7 @@ async function handleDropdowns() {
 
         // Focus the input
         input.focus();
-        await sleep(30);
+        await sleep(100);
 
         // Press DOWN to open the dropdown
         const downEvent = new KeyboardEvent('keydown', {
@@ -375,12 +421,33 @@ async function handleDropdowns() {
             cancelable: true
         });
         input.dispatchEvent(downEvent);
-        await sleep(50);
+        await sleep(150);
 
-        // Type the target value all at once to filter
-        input.value = targetValue;
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        await sleep(30);
+        // Type the target value character by character to filter
+        for (const char of targetValue) {
+            input.value += char;
+
+            const keydownEvent = new KeyboardEvent('keydown', {
+                key: char,
+                bubbles: true,
+                cancelable: true
+            });
+            input.dispatchEvent(keydownEvent);
+
+            const inputEvent = new Event('input', { bubbles: true });
+            input.dispatchEvent(inputEvent);
+
+            const keyupEvent = new KeyboardEvent('keyup', {
+                key: char,
+                bubbles: true,
+                cancelable: true
+            });
+            input.dispatchEvent(keyupEvent);
+
+            await sleep(30);
+        }
+
+        await sleep(150);
 
         // Press Enter to select the first/only matching option
         const enterEvent = new KeyboardEvent('keydown', {
@@ -399,7 +466,7 @@ async function handleDropdowns() {
         });
         input.dispatchEvent(enterEventUp);
 
-        await sleep(50);
+        await sleep(150);
         processedCount++;
     }
 
