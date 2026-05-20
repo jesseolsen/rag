@@ -8,6 +8,52 @@ let draggedElement = null;
 const DEFAULT_BACKEND_URL = 'http://localhost:8000';
 let backendUrl = DEFAULT_BACKEND_URL;
 
+function getUploadErrorMessage(error) {
+    // Check if it's a network/connection error
+    if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+        return `<strong>Connection Error:</strong> Cannot reach Resume RAG backend.<br/>
+                <small>Make sure the backend is running:<br/><code>cd ~/code/jesseolsen/rag && source venv/bin/activate && uvicorn app.main:app --reload</code></small>`;
+    }
+
+    // Check for specific HTTP errors
+    if (error.message.includes('404')) {
+        return `<strong>Server Error (404):</strong> Backend endpoint not found.<br/>
+                <small>The backend needs to be restarted after code updates. Run:<br/><code>uvicorn app.main:app --reload</code></small>`;
+    }
+
+    if (error.message.includes('500')) {
+        return `<strong>Server Error (500):</strong> Backend error processing upload.<br/>
+                <small>Check the backend logs. The database may need to be initialized.</small>`;
+    }
+
+    return `<strong>Upload Error:</strong> ${error.message || 'Unknown error'}<br/>
+            <small>Check browser console (F12, Network tab) for details.</small>`;
+}
+
+function getLoadResumesErrorMessage(error) {
+    // Check if it's a network/connection error
+    if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+        return `<strong>❌ Backend Offline</strong><br/>
+                <small>The Resume RAG backend is not running.<br/>
+                Start it with:<br/>
+                <code style="background: #f0f0f0; padding: 4px; display: inline-block; margin-top: 4px;">
+                cd ~/code/jesseolsen/rag && source venv/bin/activate && uvicorn app.main:app --reload
+                </code></small>`;
+    }
+
+    if (error.message.includes('404')) {
+        return `<strong>❌ Server Misconfigured</strong><br/>
+                <small>Backend API endpoint not found. Restart the backend:<br/>
+                <code style="background: #f0f0f0; padding: 4px; display: inline-block; margin-top: 4px;">
+                uvicorn app.main:app --reload
+                </code></small>`;
+    }
+
+    return `<strong>❌ Error Loading Resumes</strong><br/>
+            <small>${error.message || 'Unknown error'}<br/>
+            Check browser console (F12) for details.</small>`;
+}
+
 // Load settings and resumes on popup open
 document.addEventListener('DOMContentLoaded', async () => {
     backendUrl = await getStoredBackendUrl() || DEFAULT_BACKEND_URL;
@@ -67,7 +113,7 @@ async function loadResumes() {
     try {
         // Fetch all resumes from backend
         const response = await fetch(`${backendUrl}/api/v1/resume/`);
-        if (!response.ok) throw new Error('Failed to fetch resumes');
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
 
         let backendResumes = await response.json();
         console.log('[POPUP] Loaded resumes from backend:', backendResumes);
@@ -106,7 +152,10 @@ async function loadResumes() {
         renderResumeList();
     } catch (error) {
         console.error('[POPUP] Error loading resumes:', error);
-        showStatus('Error loading resumes', 'error', '#uploadStatus');
+        const errorMsg = getLoadResumesErrorMessage(error);
+        const noResumes = document.getElementById('noResumes');
+        noResumes.innerHTML = errorMsg;
+        noResumes.style.display = 'block';
     }
 }
 
@@ -264,7 +313,7 @@ async function handleResumeUpload(e) {
             body: formData
         });
 
-        if (!response.ok) throw new Error('Upload failed');
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         const uploaded = await response.json();
 
         // Prepend new resume to the list
@@ -283,7 +332,8 @@ async function handleResumeUpload(e) {
         }, 2000);
     } catch (error) {
         console.error('[POPUP] Upload error:', error);
-        uploadStatus.textContent = `Error: ${error.message}`;
+        const errorMsg = getUploadErrorMessage(error);
+        uploadStatus.innerHTML = errorMsg;
         uploadStatus.className = 'upload-status error';
     }
 
