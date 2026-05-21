@@ -878,6 +878,7 @@ async function handleDropdowns(data, backendUrl) {
         if (questionText && questionText.length > 5) {
             // Search for a matching saved answer
             try {
+                console.log('[RESUME_RAG] Searching for answer to:', questionText);
                 const searchResponse = await apiRequest(
                     `${backendUrl}/api/v1/field-answers/search/by-question?question_text=${encodeURIComponent(questionText)}`
                 );
@@ -885,16 +886,23 @@ async function handleDropdowns(data, backendUrl) {
                 if (searchResponse.ok) {
                     const searchData = await searchResponse.json();
                     const matches = searchData.matches || [];
+                    console.log('[RESUME_RAG] Search returned', matches.length, 'matches for', questionText.substring(0, 30));
 
                     if (matches.length > 0) {
                         const bestMatch = matches[0];
-                        console.log('[RESUME_RAG] Found saved answer for combobox ' + fieldId + ': ' + bestMatch.answer_text);
+                        console.log('[RESUME_RAG] Found saved answer for combobox ' + fieldId + ': ' + bestMatch.answer_text + ' (score: ' + bestMatch.score + ')');
                         dropdownConfig[fieldId] = bestMatch.answer_text;
+                    } else {
+                        console.log('[RESUME_RAG] No matches found for:', questionText.substring(0, 30));
                     }
+                } else {
+                    console.log('[RESUME_RAG] Search request failed:', searchResponse.status);
                 }
             } catch (err) {
                 console.log('[RESUME_RAG] Error searching for combobox answer:', err.message);
             }
+        } else {
+            console.log('[RESUME_RAG] Skipping search for field', fieldId, '- question text too short or empty');
         }
     }
 
@@ -945,7 +953,7 @@ async function handleDropdowns(data, backendUrl) {
             await sleep(30);
         }
 
-        await sleep(150);
+        await sleep(200);
 
         // Press Enter to select the first/only matching option
         const enterEvent = new KeyboardEvent('keydown', {
@@ -964,11 +972,31 @@ async function handleDropdowns(data, backendUrl) {
         });
         input.dispatchEvent(enterEventUp);
 
+        console.log('[RESUME_RAG] Pressed ENTER for ' + fieldId + ', now pressing TAB to commit...');
+        await sleep(150);
+
+        // Press Tab to commit the selection
+        const tabEvent = new KeyboardEvent('keydown', {
+            key: 'Tab',
+            code: 'Tab',
+            bubbles: true,
+            cancelable: true
+        });
+        input.dispatchEvent(tabEvent);
+
+        const tabEventUp = new KeyboardEvent('keyup', {
+            key: 'Tab',
+            code: 'Tab',
+            bubbles: true,
+            cancelable: true
+        });
+        input.dispatchEvent(tabEventUp);
+
         await sleep(150);
 
         // Track that this dropdown was filled
         window.RESUME_RAG_FILLED_FIELDS[fieldId] = targetValue;
-        console.log('[RESUME_RAG] Tracked dropdown:', fieldId, '=', targetValue);
+        console.log('[RESUME_RAG] ✓ Completed dropdown:', fieldId, '=', targetValue);
 
         processedCount++;
     }

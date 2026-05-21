@@ -166,10 +166,14 @@ async def search_field_answers(
     result = await db.execute(select(FormFieldAnswer))
     all_answers = result.scalars().all()
 
+    # Determine minimum matches based on query length (adaptive)
+    query_keyword_count = len(query_keywords.split()) if query_keywords else 0
+    min_matches = 1 if query_keyword_count <= 2 else 2
+
     # Score each answer
     scored_answers = []
     for answer in all_answers:
-        score = fuzzy_match_keywords(query_keywords, answer.question_keywords, min_matches=2)
+        score = fuzzy_match_keywords(query_keywords, answer.question_keywords, min_matches=min_matches)
         if score > 0:  # Only return matches with score > 0
             scored_answers.append({
                 'id': answer.id,
