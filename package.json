@@ -1,3 +1,29 @@
 {
-  "dependencies": {}
+  "name": "rag",
+  "version": "1.0.0",
+  "description": "A Chrome extension that automatically fills job application forms with your resume data, plus a backend API for generating tailored cover letters and responses.",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "node tests/test-extension.js",
+    "test:degree": "node tests/test-degree-field.js",
+    "watch": "node tests/watch-extension.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jesseolsen/rag.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/jesseolsen/rag/issues"
+  },
+  "homepage": "https://github.com/jesseolsen/rag#readme",
+  "devDependencies": {
+    "puppeteer": "^24.43.1"
+  }
 }

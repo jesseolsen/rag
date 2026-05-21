@@ -9,6 +9,56 @@ window.RESUME_RAG_RESUME_DATA = {};
 window.RESUME_RAG_BACKEND_URL_STORED = 'http://localhost:8000';
 window.RESUME_RAG_FILLED_FIELDS = {}; // Track which fields were filled by extension
 
+// Helper function to make API requests through background script (avoids CORS issues with localhost)
+async function apiRequest(url, options = {}) {
+    return new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage({
+            action: 'apiRequest',
+            url: url,
+            method: options.method || 'GET',
+            headers: options.headers || {},
+            body: options.body
+        }, (response) => {
+            if (chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message));
+            } else if (!response) {
+                reject(new Error('No response from background script'));
+            } else if (response.error) {
+                reject(new Error(response.error));
+            } else {
+                // Return a fetch-like response object
+                resolve({
+                    ok: response.ok,
+                    status: response.status,
+                    json: async () => response.data,
+                    arrayBuffer: async () => {
+                        if (response.data && response.data._binary) {
+                            const binaryStr = atob(response.data.base64);
+                            const bytes = new Uint8Array(binaryStr.length);
+                            for (let i = 0; i < binaryStr.length; i++) {
+                                bytes[i] = binaryStr.charCodeAt(i);
+                            }
+                            return bytes.buffer;
+                        }
+                        return response.data;
+                    },
+                    blob: async () => {
+                        if (response.data && response.data._binary) {
+                            const binaryStr = atob(response.data.base64);
+                            const bytes = new Uint8Array(binaryStr.length);
+                            for (let i = 0; i < binaryStr.length; i++) {
+                                bytes[i] = binaryStr.charCodeAt(i);
+                            }
+                            return new Blob([bytes], { type: response.data.contentType || 'application/octet-stream' });
+                        }
+                        return new Blob([JSON.stringify(response.data)], { type: 'application/json' });
+                    }
+                });
+            }
+        });
+    });
+}
+
 // Listen for input changes on file inputs - detect when file picker opens
 document.addEventListener('change', async (e) => {
     const fileInput = e.target;
@@ -113,6 +163,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // Return true to keep the channel open for async response
         return true;
     }
+
+    if (request.action === 'captureAnswers') {
+        console.log('[RESUME_RAG] Capture answers requested');
+        captureAnswersFromCurrentForm(request.backendUrl, window.RESUME_RAG_FILLED_FIELDS).then((result) => {
+            sendResponse(result);
+        }).catch((error) => {
+            console.log('[RESUME_RAG] Error capturing answers:', error.message);
+            sendResponse({ success: false, error: error.message });
+        });
+        return true; // Keep channel open for async response
+    }
 });
 
 // Hook into form submissions to capture final values
@@ -128,7 +189,7 @@ document.addEventListener('submit', async (e) => {
             const backendUrl = window.RESUME_RAG_BACKEND_URL || 'http://localhost:8000';
 
             // Save form response
-            await fetch(`${backendUrl}/api/v1/form-response`, {
+            await apiRequest(`${backendUrl}/api/v1/form-response`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -161,7 +222,7 @@ async function captureAndSaveFieldAnswers(formData, backendUrl) {
             // Only save if it's not empty and looks like a question
             if ((questionText.includes('?') || questionText.includes(':')) && formData[textarea.id].trim()) {
                 try {
-                    await fetch(`${backendUrl}/api/v1/field-answers/`, {
+                    await apiRequest(`${backendUrl}/api/v1/field-answers/`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -352,13 +413,14 @@ async function fillForm(resumeData, resumeOrder, backendUrl) {
     // First, try to pre-fill textareas with saved field answers
     filledCount += await preFillTextareasFromSavedAnswers(backendUrl);
 
-    // Return promise that completes after dropdowns are processed
-    return handleDropdowns(data, backendUrl).then((dropdownCount) => {
+    // Return promise that completes after dropdowns and files are processed
+    return handleDropdowns(data, backendUrl).then(async (dropdownCount) => {
         let totalFilled = filledCount + dropdownCount;
 
         // Handle file inputs (if resumeOrder is provided)
         if (resumeOrder && resumeOrder.length > 0) {
-            totalFilled += handleFileInputs(resumeOrder, backendUrl);
+            const fileCount = await handleFileInputs(resumeOrder, backendUrl);
+            totalFilled += fileCount;
         }
 
         console.log('[RESUME_RAG] Total filled:', totalFilled);
@@ -391,7 +453,7 @@ async function preFillTextareasFromSavedAnswers(backendUrl) {
         }
 
         // Get all saved field answers from backend
-        const response = await fetch(`${backendUrl}/api/v1/field-answers/`);
+        const response = await apiRequest(`${backendUrl}/api/v1/field-answers/`);
         if (!response.ok) {
             console.log('[RESUME_RAG] Could not fetch saved field answers');
             return 0;
@@ -415,7 +477,7 @@ async function preFillTextareasFromSavedAnswers(backendUrl) {
 
             // Use the backend search endpoint to find matching answers
             try {
-                const searchResponse = await fetch(
+                const searchResponse = await apiRequest(
                     `${backendUrl}/api/v1/field-answers/search/by-question?question_text=${encodeURIComponent(questionText)}`
                 );
 
@@ -465,7 +527,7 @@ async function preFillTextareasFromSavedAnswers(backendUrl) {
             console.log('[RESUME_RAG] Searching for answer to select:', questionText.substring(0, 50));
 
             try {
-                const searchResponse = await fetch(
+                const searchResponse = await apiRequest(
                     `${backendUrl}/api/v1/field-answers/search/by-question?question_text=${encodeURIComponent(questionText)}`
                 );
 
@@ -543,7 +605,7 @@ async function preFillTextareasFromSavedAnswers(backendUrl) {
             console.log('[RESUME_RAG] Searching for pre-fill answer to Yes/No:', questionText.substring(0, 50));
 
             try {
-                const searchResponse = await fetch(
+                const searchResponse = await apiRequest(
                     `${backendUrl}/api/v1/field-answers/search/by-question?question_text=${encodeURIComponent(questionText)}`
                 );
 
@@ -776,25 +838,34 @@ async function handleDropdowns(data, backendUrl) {
             continue;
         }
 
-        // Try to find the question text associated with this input
+        // Try to find the question text associated with this input (same logic as capture)
         let questionText = '';
-        let parent = input.closest('label') || input.closest('[role="group"]') || input.parentElement;
 
-        if (parent) {
-            const labelElement = parent.querySelector('label');
-            if (labelElement) {
-                questionText = labelElement.textContent?.trim() || '';
+        // First try: look for a label element associated with this input
+        const labelFor = document.querySelector(`label[for="${fieldId}"]`);
+        if (labelFor) {
+            questionText = labelFor.textContent?.trim() || '';
+        }
+
+        // Second try: find label in parent container
+        if (!questionText) {
+            let parent = input.closest('div[class*="field"]') || input.closest('div[class*="select"]') || input.closest('fieldset');
+            if (parent) {
+                const labelElement = parent.querySelector('label');
+                if (labelElement) {
+                    questionText = labelElement.textContent?.trim() || '';
+                }
             }
         }
 
+        // Third try: traverse up to find any label
         if (!questionText) {
-            // Try to find question in parent containers
             let current = input.parentElement;
             let depth = 0;
-            while (current && !questionText && depth < 10) {
-                const allText = current.textContent?.substring(0, 200) || '';
-                if (allText.includes('?')) {
-                    questionText = allText.trim();
+            while (current && !questionText && current.tagName !== 'BODY' && depth < 10) {
+                const labelElement = current.querySelector('label');
+                if (labelElement) {
+                    questionText = labelElement.textContent?.trim() || '';
                     break;
                 }
                 current = current.parentElement;
@@ -802,10 +873,12 @@ async function handleDropdowns(data, backendUrl) {
             }
         }
 
+        console.log('[RESUME_RAG] Combobox field:', fieldId, 'question:', questionText?.substring(0, 50));
+
         if (questionText && questionText.length > 5) {
             // Search for a matching saved answer
             try {
-                const searchResponse = await fetch(
+                const searchResponse = await apiRequest(
                     `${backendUrl}/api/v1/field-answers/search/by-question?question_text=${encodeURIComponent(questionText)}`
                 );
 
@@ -946,7 +1019,7 @@ function captureFormData() {
     return data;
 }
 
-function handleFileInputs(resumeOrder, backendUrl) {
+async function handleFileInputs(resumeOrder, backendUrl) {
     let fileCount = 0;
 
     // Find enabled resumes
@@ -959,6 +1032,8 @@ function handleFileInputs(resumeOrder, backendUrl) {
 
     // Process file inputs
     const fileInputs = document.querySelectorAll('input[type="file"]');
+    const attachmentPromises = [];
+
     fileInputs.forEach(input => {
         if (!input.offsetHeight) return; // Skip hidden
 
@@ -975,15 +1050,35 @@ function handleFileInputs(resumeOrder, backendUrl) {
 
         // Match Resume/CV field
         if (/resume|cv|curriculum/.test(context) && resumeFile) {
-            fetchAndSetFile(input, resumeFile.id, backendUrl);
+            console.log('[RESUME_RAG] Attaching resume to:', input.id || input.name);
+            attachmentPromises.push(fetchAndSetFile(input, resumeFile.id, backendUrl));
             fileCount++;
         }
         // Match Cover Letter field
         else if (/cover|letter|motivation/.test(context) && coverFile) {
-            fetchAndSetFile(input, coverFile.id, backendUrl);
+            console.log('[RESUME_RAG] Attaching cover letter to:', input.id || input.name);
+            attachmentPromises.push(fetchAndSetFile(input, coverFile.id, backendUrl));
             fileCount++;
         }
     });
+
+    // Wait for all file attachments to complete
+    if (attachmentPromises.length > 0) {
+        const results = await Promise.allSettled(attachmentPromises);
+        const successful = results.filter(r => r.status === 'fulfilled').length;
+        const failed = results.filter(r => r.status === 'rejected').length;
+
+        if (failed > 0) {
+            console.log(`[RESUME_RAG] ⚠️ File attachments: ${successful} succeeded, ${failed} failed`);
+            results.forEach((result, i) => {
+                if (result.status === 'rejected') {
+                    console.log(`[RESUME_RAG] File attachment ${i} failed:`, result.reason);
+                }
+            });
+        } else {
+            console.log(`[RESUME_RAG] ✓ All ${successful} file attachment(s) completed successfully`);
+        }
+    }
 
     return fileCount;
 }
@@ -991,7 +1086,7 @@ function handleFileInputs(resumeOrder, backendUrl) {
 async function fetchAndSetFile(fileInput, resumeId, backendUrl) {
     try {
         console.log('[RESUME_RAG] fetchAndSetFile called:', { resumeId, backendUrl });
-        const response = await fetch(`${backendUrl}/api/v1/resume/${resumeId}/file`);
+        const response = await apiRequest(`${backendUrl}/api/v1/resume/${resumeId}/file`);
         if (!response.ok) {
             console.log('[RESUME_RAG] Failed to fetch resume file:', response.status);
             return;
@@ -1072,7 +1167,7 @@ async function attachFileToInput(fileInput, resumeId, filename) {
         const backendUrl = window.RESUME_RAG_BACKEND_URL_STORED;
         console.log('[RESUME_RAG] attachFileToInput called:', { resumeId, filename, backendUrl });
 
-        const response = await fetch(`${backendUrl}/api/v1/resume/${resumeId}/file`);
+        const response = await apiRequest(`${backendUrl}/api/v1/resume/${resumeId}/file`);
         if (!response.ok) {
             console.log('[RESUME_RAG] Failed to fetch file for attach:', response.status);
             return;
@@ -1096,21 +1191,6 @@ async function attachFileToInput(fileInput, resumeId, filename) {
         console.log('[RESUME_RAG] Error attaching file:', error.message, error.stack);
     }
 }
-
-// Listen for capture answers request from popup
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === 'captureAnswers') {
-        console.log('[RESUME_RAG] Capture answers requested');
-        captureAnswersFromCurrentForm(request.backendUrl, window.RESUME_RAG_FILLED_FIELDS).then((result) => {
-            sendResponse(result);
-        }).catch((error) => {
-            console.log('[RESUME_RAG] Error capturing answers:', error.message);
-            sendResponse({ success: false, error: error.message });
-        });
-        return true; // Keep channel open for async response
-    }
-});
-
 async function captureAnswersFromCurrentForm(backendUrl, filledFields) {
     console.log('[RESUME_RAG] Capturing answers from current form');
     console.log('[RESUME_RAG] Filled fields:', filledFields);
@@ -1155,7 +1235,7 @@ async function captureAnswersFromCurrentForm(backendUrl, filledFields) {
             savedAnswers.add(answerKey);
 
             try {
-                const response = await fetch(`${backendUrl}/api/v1/field-answers/`, {
+                const response = await apiRequest(`${backendUrl}/api/v1/field-answers/`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1258,7 +1338,7 @@ async function captureAnswersFromCurrentForm(backendUrl, filledFields) {
             savedAnswers.add(answerKey);
 
             try {
-                const response = await fetch(`${backendUrl}/api/v1/field-answers/`, {
+                const response = await apiRequest(`${backendUrl}/api/v1/field-answers/`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1346,7 +1426,7 @@ async function captureAnswersFromCurrentForm(backendUrl, filledFields) {
             savedAnswers.add(answerKey);
 
             try {
-                const response = await fetch(`${backendUrl}/api/v1/field-answers/`, {
+                const response = await apiRequest(`${backendUrl}/api/v1/field-answers/`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1415,7 +1495,7 @@ async function captureAnswersFromCurrentForm(backendUrl, filledFields) {
             savedAnswers.add(answerKey);
 
             try {
-                const response = await fetch(`${backendUrl}/api/v1/field-answers/`, {
+                const response = await apiRequest(`${backendUrl}/api/v1/field-answers/`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1434,39 +1514,103 @@ async function captureAnswersFromCurrentForm(backendUrl, filledFields) {
         }
     }
 
-    // Capture React Select dropdown answers (Yes/No questions)
+    // Capture React Select dropdown answers (Degree, School, Yes/No questions, etc.)
     const comboboxInputs = document.querySelectorAll('[role="combobox"]');
+    console.log('[RESUME_RAG] Found', comboboxInputs.length, 'combobox elements');
     for (const input of comboboxInputs) {
-        const fieldId = input.id;
-        const currentValue = input.value?.trim() || '';
+        const fieldId = input.id || input.name || '';
+
+        // React Select stores visible value in a sibling div, not in input.value
+        let currentValue = input.value?.trim() || '';
+
+        // Look for the selected value in React Select's display elements
+        if (!currentValue) {
+            // Try multiple container levels
+            let container = input.parentElement;
+            for (let i = 0; i < 5 && container && !currentValue; i++) {
+                // Try various React Select value selectors
+                const valueElement = container.querySelector('[class*="singleValue"]') ||
+                                    container.querySelector('[class*="single-value"]') ||
+                                    container.querySelector('[class*="SingleValue"]') ||
+                                    container.querySelector('[class*="SelectValue"]') ||
+                                    container.querySelector('[class*="select__value"]') ||
+                                    container.querySelector('[class*="-value-container"] > div:not([class*="placeholder"])') ||
+                                    container.querySelector('div[class*="value"]:not([class*="container"])');
+                if (valueElement && valueElement.textContent?.trim() && valueElement.textContent?.trim() !== 'Select...') {
+                    currentValue = valueElement.textContent?.trim() || '';
+                    console.log('[RESUME_RAG] Found value element:', valueElement.className, 'text:', currentValue);
+                    break;
+                }
+                container = container.parentElement;
+            }
+        }
+
+        // Also check for aria-label or title attributes
+        if (!currentValue) {
+            currentValue = input.getAttribute('aria-label') || input.getAttribute('title') || '';
+        }
+
+        // Greenhouse specific: look for the selected value chip with × button
+        if (!currentValue) {
+            let container = input.parentElement;
+            for (let i = 0; i < 5 && container && !currentValue; i++) {
+                // Find any element with × (close button) - the text before it is the value
+                const chips = container.querySelectorAll('div');
+                for (const chip of chips) {
+                    const text = chip.textContent?.trim() || '';
+                    // If has × and some actual text before it
+                    if (text.includes('×') && text.length > 2) {
+                        currentValue = text.replace('×', '').trim();
+                        console.log('[RESUME_RAG] Found chip value:', currentValue);
+                        break;
+                    }
+                }
+                container = container.parentElement;
+            }
+        }
+
+        console.log('[RESUME_RAG] Combobox:', { id: fieldId, value: currentValue });
 
         if (!currentValue || currentValue === 'Select...') continue;
 
         // Get question text from surrounding elements
         let questionText = '';
-        let parent = input.closest('label') || input.closest('fieldset') || input.closest('div[class*="field"]');
 
-        if (parent) {
-            const labelElement = parent.querySelector('label');
-            if (labelElement) {
-                questionText = labelElement.textContent?.trim() || '';
+        // First try: look for a label element associated with this input
+        const labelFor = document.querySelector(`label[for="${input.id}"]`);
+        if (labelFor) {
+            questionText = labelFor.textContent?.trim() || '';
+        }
+
+        // Second try: find label in parent container
+        if (!questionText) {
+            let parent = input.closest('div[class*="field"]') || input.closest('div[class*="select"]') || input.closest('fieldset');
+            if (parent) {
+                const labelElement = parent.querySelector('label');
+                if (labelElement) {
+                    questionText = labelElement.textContent?.trim() || '';
+                }
             }
         }
 
+        // Third try: traverse up to find any label
         if (!questionText) {
-            // Try to find label by traversing up the DOM
             let current = input.parentElement;
-            while (current && !questionText && current.tagName !== 'BODY') {
-                const allText = current.textContent?.substring(0, 200) || '';
-                if (allText.includes('?') || allText.includes(':')) {
-                    questionText = allText.trim();
+            let depth = 0;
+            while (current && !questionText && current.tagName !== 'BODY' && depth < 10) {
+                const labelElement = current.querySelector('label');
+                if (labelElement) {
+                    questionText = labelElement.textContent?.trim() || '';
                     break;
                 }
                 current = current.parentElement;
+                depth++;
             }
         }
 
-        if (!questionText || questionText.length < 5) continue;
+        console.log('[RESUME_RAG] Combobox question text:', questionText?.substring(0, 50));
+
+        if (!questionText || questionText.length < 3) continue;
 
         // Check if this field was filled by extension
         const wasFilledByExtension = filledFields && filledFields[fieldId];
@@ -1493,7 +1637,7 @@ async function captureAnswersFromCurrentForm(backendUrl, filledFields) {
             savedAnswers.add(answerKey);
 
             try {
-                const response = await fetch(`${backendUrl}/api/v1/field-answers/`, {
+                const response = await apiRequest(`${backendUrl}/api/v1/field-answers/`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1508,6 +1652,82 @@ async function captureAnswersFromCurrentForm(backendUrl, filledFields) {
                 }
             } catch (error) {
                 console.log('[RESUME_RAG] Error saving dropdown answer:', error.message);
+            }
+        }
+    }
+
+    // Capture text input values (for autocomplete fields like School, Degree, etc.)
+    const textInputs = document.querySelectorAll('input[type="text"]:not([role="combobox"])');
+    console.log('[RESUME_RAG] Found', textInputs.length, 'text input elements');
+    for (const input of textInputs) {
+        const fieldId = input.id || input.name;
+        const currentValue = input.value?.trim() || '';
+
+        if (!currentValue || currentValue.length < 2) continue;
+
+        // Skip common non-answer fields
+        if (input.type === 'search' || input.autocomplete === 'off') continue;
+
+        // Get question text from label or surrounding elements
+        let questionText = '';
+        const label = document.querySelector(`label[for="${input.id}"]`);
+        if (label) {
+            questionText = label.textContent?.trim() || '';
+        }
+
+        if (!questionText) {
+            let parent = input.closest('div[class*="field"]') || input.closest('div[class*="form"]') || input.closest('fieldset');
+            if (parent) {
+                const labelElement = parent.querySelector('label');
+                if (labelElement) {
+                    questionText = labelElement.textContent?.trim() || '';
+                }
+            }
+        }
+
+        if (!questionText || questionText.length < 3) {
+            console.log('[RESUME_RAG] Skipping text input without question text, id:', fieldId);
+            continue;
+        }
+
+        const wasFilledByExtension = filledFields && filledFields[fieldId];
+        let shouldCapture = false;
+
+        if (!wasFilledByExtension) {
+            shouldCapture = true;
+            console.log('[RESUME_RAG] Capturing new text input field:', questionText.substring(0, 50));
+        } else {
+            const originalValue = filledFields[fieldId];
+            if (originalValue !== currentValue) {
+                shouldCapture = true;
+                console.log('[RESUME_RAG] Capturing modified text input field:', questionText.substring(0, 50));
+            }
+        }
+
+        if (shouldCapture) {
+            const answerKey = `${questionText}||${currentValue}`;
+            if (savedAnswers.has(answerKey)) {
+                console.log('[RESUME_RAG] Skipping duplicate text input answer for:', questionText.substring(0, 50));
+                continue;
+            }
+            savedAnswers.add(answerKey);
+
+            try {
+                const response = await apiRequest(`${backendUrl}/api/v1/field-answers/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        question_text: questionText,
+                        answer_text: currentValue,
+                        field_type: 'text'
+                    })
+                });
+                if (response.ok) {
+                    capturedCount++;
+                    console.log('[RESUME_RAG] ✓ Saved text input answer for:', questionText.substring(0, 50), 'value:', currentValue);
+                }
+            } catch (error) {
+                console.log('[RESUME_RAG] Error saving text input answer:', error.message);
             }
         }
     }

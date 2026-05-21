@@ -7,62 +7,48 @@ let draggedElement = null;
 // Default backend URL
 const DEFAULT_BACKEND_URL = 'http://localhost:8000';
 let backendUrl = DEFAULT_BACKEND_URL;
+const BACKEND_START_COMMAND = 'cd ~/code/jesseolsen/rag && source venv/bin/activate && uvicorn app.main:app --reload';
 
-function getUploadErrorMessage(error) {
+function getServerErrorHtml(error) {
     // Check if it's a network/connection error
     if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-        return `<strong>Connection Error:</strong> Cannot reach Resume RAG backend.<br/>
-                <small>Make sure the backend is running:<br/><code>cd ~/code/jesseolsen/rag && source venv/bin/activate && uvicorn app.main:app --reload</code></small>`;
-    }
-
-    // Check for specific HTTP errors
-    if (error.message.includes('404')) {
-        return `<strong>Server Error (404):</strong> Backend endpoint not found.<br/>
-                <small>The backend needs to be restarted after code updates. Run:<br/><code>uvicorn app.main:app --reload</code></small>`;
+        return `<h3>⚠️ Backend Offline</h3>
+                <p>Start the server:</p>
+                <code class="startup-command">${BACKEND_START_COMMAND}</code>
+                <p style="margin-top: 8px;">
+                    <a id="serverLink" href="${backendUrl}" target="_blank">Check server status →</a>
+                </p>`;
     }
 
     if (error.message.includes('500')) {
-        return `<strong>Server Error (500):</strong> Backend error processing upload.<br/>
-                <small>Check the backend logs. The database may need to be initialized.</small>`;
-    }
-
-    return `<strong>Upload Error:</strong> ${error.message || 'Unknown error'}<br/>
-            <small>Check browser console (F12, Network tab) for details.</small>`;
-}
-
-function getLoadResumesErrorMessage(error) {
-    // Check if it's a network/connection error
-    if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-        return `<strong>❌ Backend Offline</strong><br/>
-                <small>The Resume RAG backend is not running.<br/>
-                Start it with:<br/>
-                <code style="background: #f0f0f0; padding: 4px; display: inline-block; margin-top: 4px;">
-                cd ~/code/jesseolsen/rag && source venv/bin/activate && uvicorn app.main:app --reload
-                </code></small>`;
+        return `<h3>⚠️ Server Error</h3>
+                <p>The backend returned an error. Check the server logs.</p>
+                <p>You may need to initialize the database:</p>
+                <code class="startup-command">cd ~/code/jesseolsen/rag && source venv/bin/activate && python init_db.py</code>`;
     }
 
     if (error.message.includes('404')) {
-        return `<strong>❌ Server Misconfigured</strong><br/>
-                <small>Backend API endpoint not found. Restart the backend:<br/>
-                <code style="background: #f0f0f0; padding: 4px; display: inline-block; margin-top: 4px;">
-                uvicorn app.main:app --reload
-                </code></small>`;
+        return `<h3>⚠️ Server Misconfigured</h3>
+                <p>Backend API endpoint not found. Restart the backend:</p>
+                <code class="startup-command">${BACKEND_START_COMMAND}</code>`;
     }
 
-    return `<strong>❌ Error Loading Resumes</strong><br/>
-            <small>${error.message || 'Unknown error'}<br/>
-            Check browser console (F12) for details.</small>`;
+    return `<h3>⚠️ Error</h3>
+            <p>${error.message || 'Unknown error'}</p>
+            <p><small>Check browser console (F12) for details.</small></p>`;
 }
 
 // Load settings and resumes on popup open
 document.addEventListener('DOMContentLoaded', async () => {
     backendUrl = await getStoredBackendUrl() || DEFAULT_BACKEND_URL;
 
-    // Check if server is running
-    await checkServerConnection();
+    // Check if server is running - only load data if server is available
+    const serverAvailable = await checkServerConnection();
 
-    await loadResumes();
-    await loadFieldAnswers();
+    if (serverAvailable) {
+        await loadResumes();
+        await loadFieldAnswers();
+    }
     setupEventListeners();
 });
 
@@ -81,6 +67,10 @@ function saveBackendUrl(url) {
 async function checkServerConnection() {
     const serverError = document.getElementById('serverError');
     const serverLink = document.getElementById('serverLink');
+    const uploadStatus = document.getElementById('uploadStatus');
+
+    // Always hide upload status on check (clear any cached state)
+    uploadStatus.style.display = 'none';
 
     try {
         const response = await fetch(`${backendUrl}/health`, { timeout: 3000 });
@@ -152,10 +142,10 @@ async function loadResumes() {
         renderResumeList();
     } catch (error) {
         console.error('[POPUP] Error loading resumes:', error);
-        const errorMsg = getLoadResumesErrorMessage(error);
-        const noResumes = document.getElementById('noResumes');
-        noResumes.innerHTML = errorMsg;
-        noResumes.style.display = 'block';
+        // Show error in the top serverError div (consolidated error display)
+        const serverError = document.getElementById('serverError');
+        serverError.innerHTML = getServerErrorHtml(error);
+        serverError.style.display = 'block';
     }
 }
 
@@ -332,9 +322,11 @@ async function handleResumeUpload(e) {
         }, 2000);
     } catch (error) {
         console.error('[POPUP] Upload error:', error);
-        const errorMsg = getUploadErrorMessage(error);
-        uploadStatus.innerHTML = errorMsg;
-        uploadStatus.className = 'upload-status error';
+        uploadStatus.style.display = 'none';
+        // Show error in the top serverError div (consolidated error display)
+        const serverError = document.getElementById('serverError');
+        serverError.innerHTML = getServerErrorHtml(error);
+        serverError.style.display = 'block';
     }
 
     // Reset file input
@@ -374,13 +366,13 @@ async function fillForm() {
         status.textContent = 'Filling in fields...';
         status.className = 'status info';
 
-        // Send the message
+        // Send the message to the main frame only (frameId: 0)
         chrome.tabs.sendMessage(tab.id, {
             action: 'fillForm',
             resumeData: resumeData,
             resumeOrder: resumeOrder,
             backendUrl: backendUrl
-        }, (response) => {
+        }, { frameId: 0 }, (response) => {
             if (responseReceived) {
                 console.log('[POPUP] Ignoring duplicate response');
                 return;
@@ -393,8 +385,9 @@ async function fillForm() {
 
             if (chrome.runtime.lastError) {
                 console.error('[POPUP] Chrome error details:', chrome.runtime.lastError.message);
-                // Don't show error for "Receiving end does not exist" - it means content script isn't loaded
-                if (!chrome.runtime.lastError.message.includes('Receiving end does not exist')) {
+                if (chrome.runtime.lastError.message.includes('Receiving end does not exist')) {
+                    showStatus('Refresh the page first, then try again.', 'error');
+                } else {
                     showStatus('Error communicating with page. Try refreshing.', 'error');
                 }
                 return;
@@ -629,12 +622,12 @@ async function captureAnswers() {
         // Get the active tab to find the form page
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-        // Send request to content script to capture answers
+        // Send request to content script to capture answers (main frame only)
         chrome.tabs.sendMessage(tab.id, {
             action: 'captureAnswers',
             backendUrl: backendUrl,
             filledFields: {}  // Content script already has this in window.RESUME_RAG_FILLED_FIELDS
-        }, async (response) => {
+        }, { frameId: 0 }, async (response) => {
             captureButton.disabled = false;
 
             if (chrome.runtime.lastError) {

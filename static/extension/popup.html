@@ -141,13 +141,18 @@
             padding: 8px;
         }
         .upload-status code {
-            background: #f5f5f5;
-            padding: 2px 4px;
-            border-radius: 3px;
-            font-family: 'Courier New', monospace;
-            font-size: 10px;
-            display: inline-block;
-            margin-top: 4px;
+            background: #fff8e8;
+            border: 1px solid #e0c27a;
+            color: #6d3b07;
+            padding: 8px 10px;
+            border-radius: 4px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 12px;
+            line-height: 1.4;
+            display: block;
+            margin-top: 6px;
+            white-space: pre-wrap;
+            word-break: break-word;
         }
         .upload-status small {
             display: block;
@@ -157,21 +162,26 @@
         #noResumes {
             padding: 12px;
             text-align: center;
-            color: #999;
-            font-size: 12px;
+            color: #555;
+            font-size: 13px;
             line-height: 1.6;
             background: #fafafa;
             border-radius: 4px;
         }
         #noResumes code {
-            background: #f0f0f0;
-            padding: 4px;
-            border-radius: 3px;
-            font-family: 'Courier New', monospace;
-            font-size: 10px;
-            display: inline-block;
-            margin-top: 4px;
-            white-space: nowrap;
+            background: #fff8e8;
+            border: 1px solid #e0c27a;
+            color: #6d3b07;
+            padding: 8px 10px;
+            border-radius: 4px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 12px;
+            line-height: 1.4;
+            display: block;
+            margin-top: 6px;
+            white-space: pre-wrap;
+            word-break: break-word;
+            text-align: left;
         }
         #noResumes strong {
             display: block;
@@ -259,15 +269,21 @@
         }
         .server-error p {
             margin: 4px 0;
-            font-size: 12px;
+            font-size: 13px;
             line-height: 1.4;
         }
         .server-error code {
-            background: #fff3e0;
-            padding: 2px 4px;
-            border-radius: 2px;
-            font-family: monospace;
-            font-size: 11px;
+            background: #fff8e8;
+            border: 1px solid #e0c27a;
+            color: #6d3b07;
+            padding: 8px 10px;
+            border-radius: 4px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 12px;
+            line-height: 1.4;
+            white-space: pre-wrap;
+            word-break: break-word;
+            display: block;
         }
         .server-error a {
             color: #1976d2;
@@ -275,6 +291,9 @@
         }
         .server-error a:hover {
             text-decoration: underline;
+        }
+        .startup-command {
+            margin-top: 6px;
         }
         .field-answers-list {
             list-style: none;
@@ -430,13 +449,9 @@
         <h1>📋 Resume RAG</h1>
 
         <div id="serverError" class="server-error" style="display:none;">
-            <h3>⚠️ Server Not Responding</h3>
-            <p>The Resume RAG server is not reachable.</p>
-            <p>To get started:</p>
-            <p style="margin-left: 12px; font-size: 11px;">
-                1. Start the server:<br>
-                <code>uvicorn app.main:app --reload</code>
-            </p>
+            <h3>⚠️ Backend Offline</h3>
+            <p>Start the server:</p>
+            <code class="startup-command">cd ~/code/jesseolsen/rag && source venv/bin/activate && uvicorn app.main:app --reload</code>
             <p style="margin-top: 8px;">
                 <a id="serverLink" href="http://localhost:8000" target="_blank">Check server status →</a>
             </p>
