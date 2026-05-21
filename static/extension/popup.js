@@ -453,34 +453,35 @@ function renderFieldAnswers(answers) {
     noAnswers.style.display = 'none';
     list.innerHTML = answers.map((answer) => {
         const escapedQuestion = escapeHtml(answer.question_text);
-        const escapedAnswer = escapeHtml(answer.answer_text.substring(0, 100));
+        const escapedAnswer = escapeHtml(answer.answer_text);
         return `
-        <li class="field-answer-item" data-answer-id="${answer.id}">
+        <li class="field-answer-item" data-answer-id="${answer.id}" data-editing="false">
             <div class="field-answer-question" title="${escapedQuestion}">
-                ${escapedQuestion.substring(0, 80)}${answer.question_text.length > 80 ? '...' : ''}
+                ${escapedQuestion}
             </div>
-            <div class="field-answer-text">${escapedAnswer}</div>
-            <div class="field-answer-meta">
-                Used ${answer.use_count} time${answer.use_count !== 1 ? 's' : ''}
-                ${answer.last_used_at ? ' • ' + new Date(answer.last_used_at).toLocaleDateString() : ''}
+            <div class="field-answer-value">
+                <div class="field-answer-text" data-value="${escapedAnswer}">${escapedAnswer}</div>
             </div>
             <div class="field-answer-actions">
-                <button class="field-answer-btn edit" title="Edit answer">Edit</button>
-                <button class="field-answer-btn delete" title="Delete answer">Delete</button>
+                <button class="field-answer-btn delete" title="Delete">×</button>
             </div>
         </li>
         `;
     }).join('');
 
-    // Attach event listeners for edit and delete
+    // Attach event listeners
     list.querySelectorAll('.field-answer-item').forEach(item => {
         const answerId = item.getAttribute('data-answer-id');
+        const answerText = item.querySelector('.field-answer-text');
+        const deleteBtn = item.querySelector('.delete');
 
-        item.querySelector('.edit').addEventListener('click', () => {
-            editFieldAnswer(answerId, list);
+        // Click on answer text to edit
+        answerText.addEventListener('click', () => {
+            startEditingAnswer(item, answerId);
         });
 
-        item.querySelector('.delete').addEventListener('click', () => {
+        // Delete button
+        deleteBtn.addEventListener('click', () => {
             deleteFieldAnswer(answerId, list);
         });
     });
@@ -492,80 +493,121 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-async function editFieldAnswer(answerId, list) {
-    const item = list.querySelector(`[data-answer-id="${answerId}"]`);
-    if (!item) return;
+function startEditingAnswer(item, answerId) {
+    // Prevent double-editing
+    if (item.getAttribute('data-editing') === 'true') return;
+    item.setAttribute('data-editing', 'true');
 
-    // Find the answer object from current data
-    // We'll fetch it to get the full data
+    const valueContainer = item.querySelector('.field-answer-value');
+    const answerTextDiv = item.querySelector('.field-answer-text');
+    const originalValue = answerTextDiv.getAttribute('data-value');
+    const actionsDiv = item.querySelector('.field-answer-actions');
+
+    // Replace text with input
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'field-answer-input';
+    input.value = originalValue;
+
+    answerTextDiv.replaceWith(input);
+
+    // Add check button to actions
+    const checkBtn = document.createElement('button');
+    checkBtn.className = 'field-answer-btn check';
+    checkBtn.innerHTML = '✓';
+    checkBtn.title = 'Save';
+    actionsDiv.insertBefore(checkBtn, actionsDiv.firstChild);
+
+    // Focus input
+    input.focus();
+    input.select();
+
+    // Save on check button
+    checkBtn.addEventListener('click', async () => {
+        await saveEdit(item, answerId, input.value);
+    });
+
+    // Save on Enter key
+    input.addEventListener('keydown', async (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            await saveEdit(item, answerId, input.value);
+        } else if (e.key === 'Escape') {
+            cancelEdit(item, originalValue);
+        }
+    });
+
+    // Cancel on blur after a short delay (to allow check button click)
+    input.addEventListener('blur', () => {
+        setTimeout(() => {
+            if (item.getAttribute('data-editing') === 'true') {
+                cancelEdit(item, originalValue);
+            }
+        }, 150);
+    });
+}
+
+async function saveEdit(item, answerId, newValue) {
+    const newAnswerText = newValue.trim();
+    if (!newAnswerText) {
+        alert('Answer cannot be empty');
+        return;
+    }
+
     try {
-        const response = await fetch(`${backendUrl}/api/v1/field-answers/${answerId}`);
-        if (!response.ok) throw new Error('Failed to fetch answer');
-        const answer = await response.json();
+        // Get the answer details first
+        const getResponse = await fetch(`${backendUrl}/api/v1/field-answers/${answerId}`);
+        if (!getResponse.ok) throw new Error('Failed to fetch answer');
+        const answer = await getResponse.json();
 
-        // Hide action buttons and show edit form
-        item.querySelector('.field-answer-actions').style.display = 'none';
-        item.querySelector('.field-answer-text').style.display = 'none';
-
-        // Create edit form
-        const editForm = document.createElement('div');
-        editForm.className = 'field-answer-edit-form';
-        editForm.innerHTML = `
-            <textarea class="field-answer-edit-textarea">${escapeHtml(answer.answer_text)}</textarea>
-            <div class="field-answer-edit-buttons">
-                <button class="save">Save</button>
-                <button class="cancel">Cancel</button>
-            </div>
-        `;
-
-        item.appendChild(editForm);
-
-        const textarea = editForm.querySelector('textarea');
-        const saveBtn = editForm.querySelector('.save');
-        const cancelBtn = editForm.querySelector('.cancel');
-
-        // Save edit
-        saveBtn.addEventListener('click', async () => {
-            const newAnswerText = textarea.value.trim();
-            if (!newAnswerText) {
-                alert('Answer cannot be empty');
-                return;
-            }
-
-            try {
-                const response = await fetch(`${backendUrl}/api/v1/field-answers/${answerId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        question_text: answer.question_text,
-                        answer_text: newAnswerText,
-                        field_type: answer.field_type
-                    })
-                });
-
-                if (!response.ok) throw new Error('Failed to update answer');
-
-                // Reload answers to reflect changes
-                await loadFieldAnswers();
-            } catch (error) {
-                console.error('Error updating answer:', error);
-                alert('Failed to update answer');
-            }
+        // Update the answer
+        const response = await fetch(`${backendUrl}/api/v1/field-answers/${answerId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                question_text: answer.question_text,
+                answer_text: newAnswerText,
+                field_type: answer.field_type
+            })
         });
 
-        // Cancel edit
-        cancelBtn.addEventListener('click', () => {
-            editForm.remove();
-            item.querySelector('.field-answer-actions').style.display = 'flex';
-            item.querySelector('.field-answer-text').style.display = 'block';
-        });
+        if (!response.ok) throw new Error('Failed to update answer');
 
-        // Focus textarea
-        textarea.focus();
-        textarea.select();
+        // Reload answers to reflect changes
+        await loadFieldAnswers();
     } catch (error) {
-        console.error('Error fetching answer for edit:', error);
-        alert('Failed to load answer for editing');
+        console.error('Error updating answer:', error);
+        alert('Failed to update answer');
+        cancelEdit(item, newValue);
+    }
+}
+
+function cancelEdit(item, originalValue) {
+    item.setAttribute('data-editing', 'false');
+
+    const valueContainer = item.querySelector('.field-answer-value');
+    const input = item.querySelector('.field-answer-input');
+    const actionsDiv = item.querySelector('.field-answer-actions');
+    const checkBtn = actionsDiv.querySelector('.check');
+
+    // Remove check button
+    if (checkBtn) {
+        checkBtn.remove();
+    }
+
+    // Replace input with text
+    if (input) {
+        const textDiv = document.createElement('div');
+        textDiv.className = 'field-answer-text';
+        textDiv.setAttribute('data-value', originalValue);
+        textDiv.textContent = originalValue;
+
+        // Re-attach click listener
+        textDiv.addEventListener('click', () => {
+            startEditingAnswer(item, item.getAttribute('data-answer-id'));
+        });
+
+        input.replaceWith(textDiv);
     }
 }
 
