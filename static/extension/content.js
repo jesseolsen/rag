@@ -662,179 +662,30 @@ async function handleDropdowns(data, backendUrl) {
 
     let processedCount = 0;
 
-    // Wait for location field to appear in DOM (form loads asynchronously)
-    let locationInput = document.querySelector('input#candidate-location');
-    if (!locationInput) {
-        console.log('[RESUME_RAG] Waiting for location field to load...');
+    // Wait for comboboxes to appear in DOM (form may load asynchronously)
+    let inputs = document.querySelectorAll('input[role="combobox"]');
+    if (inputs.length === 0) {
+        console.log('[RESUME_RAG] Waiting for form fields to load...');
         for (let i = 0; i < 30; i++) {
             await sleep(100);
-            locationInput = document.querySelector('input#candidate-location');
-            if (locationInput) {
-                console.log('[RESUME_RAG] Location field found after', i * 100, 'ms');
+            inputs = document.querySelectorAll('input[role="combobox"]');
+            if (inputs.length > 0) {
+                console.log('[RESUME_RAG] Form fields found after', i * 100, 'ms');
                 break;
             }
         }
     }
 
-    // Handle country dropdown first (special case - international phone input)
-    const countryInput = document.querySelector('input#country');
-    if (countryInput) {
-        countryInput.focus();
-        await sleep(100);
-
-        // Press DOWN to open the dropdown
-        const downEvent = new KeyboardEvent('keydown', {
-            key: 'ArrowDown',
-            code: 'ArrowDown',
-            bubbles: true,
-            cancelable: true
-        });
-        countryInput.dispatchEvent(downEvent);
-        await sleep(200);
-
-        // Type "United" character by character to filter to United States
-        console.log('[RESUME_RAG]   Typing "United" character by character');
-        const countryText = 'United';
-        for (const char of countryText) {
-            countryInput.value += char;
-
-            const keydownEvent = new KeyboardEvent('keydown', {
-                key: char,
-                bubbles: true,
-                cancelable: true
-            });
-            countryInput.dispatchEvent(keydownEvent);
-
-            const inputEvent = new Event('input', { bubbles: true });
-            countryInput.dispatchEvent(inputEvent);
-
-            const keyupEvent = new KeyboardEvent('keyup', {
-                key: char,
-                bubbles: true,
-                cancelable: true
-            });
-            countryInput.dispatchEvent(keyupEvent);
-
-            await sleep(30);
-        }
-
-        await sleep(200);
-
-        // Press Enter to select United States
-        const enterEvent = new KeyboardEvent('keydown', {
-            key: 'Enter',
-            code: 'Enter',
-            bubbles: true,
-            cancelable: true
-        });
-        countryInput.dispatchEvent(enterEvent);
-        await sleep(150);
-        processedCount++;
-    }
-
-    // Handle location (city) dropdown
-    if (locationInput && data.city) {
-        console.log('[RESUME_RAG] Processing location dropdown');
-        locationInput.focus();
-        await sleep(100);
-
-        // Clear any existing value first
-        locationInput.value = '';
-        locationInput.dispatchEvent(new Event('input', { bubbles: true }));
-        await sleep(100);
-
-        // Press DOWN to open the dropdown
-        const downEvent = new KeyboardEvent('keydown', {
-            key: 'ArrowDown',
-            code: 'ArrowDown',
-            bubbles: true,
-            cancelable: true
-        });
-        locationInput.dispatchEvent(downEvent);
-        await sleep(200);
-
-        // Type the city from resume data
-        const locationText = data.city;
-        for (const char of locationText) {
-            locationInput.value += char;
-
-            const keydownEvent = new KeyboardEvent('keydown', {
-                key: char,
-                bubbles: true,
-                cancelable: true
-            });
-            locationInput.dispatchEvent(keydownEvent);
-
-            const inputEvent = new Event('input', { bubbles: true });
-            locationInput.dispatchEvent(inputEvent);
-
-            const keyupEvent = new KeyboardEvent('keyup', {
-                key: char,
-                bubbles: true,
-                cancelable: true
-            });
-            locationInput.dispatchEvent(keyupEvent);
-
-            await sleep(30);
-        }
-
-        console.log('[RESUME_RAG] Typed location:', locationText, ', waiting for dropdown to render...');
-        await sleep(1000);
-
-        // Press Enter to select the location
-        const enterEvent = new KeyboardEvent('keydown', {
-            key: 'Enter',
-            code: 'Enter',
-            bubbles: true,
-            cancelable: true
-        });
-        locationInput.dispatchEvent(enterEvent);
-
-        const enterEventUp = new KeyboardEvent('keyup', {
-            key: 'Enter',
-            code: 'Enter',
-            bubbles: true,
-            cancelable: true
-        });
-        locationInput.dispatchEvent(enterEventUp);
-
-        console.log('[RESUME_RAG] Pressed ENTER, now pressing TAB to commit selection...');
-        await sleep(150);
-
-        // Press TAB to move focus and commit the selection
-        const tabEvent = new KeyboardEvent('keydown', {
-            key: 'Tab',
-            code: 'Tab',
-            bubbles: true,
-            cancelable: true
-        });
-        locationInput.dispatchEvent(tabEvent);
-
-        const tabEventUp = new KeyboardEvent('keyup', {
-            key: 'Tab',
-            code: 'Tab',
-            bubbles: true,
-            cancelable: true
-        });
-        locationInput.dispatchEvent(tabEventUp);
-
-        console.log('[RESUME_RAG] ✓ Location dropdown processed');
-        await sleep(150);
-        processedCount++;
-    }
-
-    // Find all React Select combobox inputs
-    const inputs = document.querySelectorAll('input[role="combobox"]');
     console.log('[RESUME_RAG] Found ' + inputs.length + ' combobox inputs');
 
     const dropdownConfig = {};
 
-    // Dynamically build config by finding saved answers for each combobox
+    // Dynamically build config for each combobox from resume data or saved answers
     for (const input of inputs) {
-        const fieldId = input.id || '';
+        const fieldId = input.id || input.name || `combobox-${inputs.indexOf(input)}`;
 
-        // Skip country and phone inputs - already handled above
-        if (fieldId === 'country' || fieldId.includes('iti')) {
+        // Skip phone country code inputs (international tel input library)
+        if (fieldId.includes('iti-') || fieldId.includes('search-input')) {
             continue;
         }
 
@@ -875,10 +726,25 @@ async function handleDropdowns(data, backendUrl) {
 
         console.log('[RESUME_RAG] Combobox field:', fieldId, 'question:', questionText?.substring(0, 50));
 
-        if (questionText && questionText.length > 5) {
-            // Search for a matching saved answer
+        let valueToFill = null;
+        let valueSource = null;
+
+        // First, try to match with resume data (city, country, etc.)
+        if (questionText) {
+            const lowerQuestion = questionText.toLowerCase();
+
+            // Check for city/location fields
+            if (/location|city|where.*live|where.*located/i.test(lowerQuestion) && data.city) {
+                valueToFill = data.city;
+                valueSource = 'resume';
+                console.log('[RESUME_RAG] Matched resume city:', valueToFill);
+            }
+        }
+
+        // If no resume match, search saved answers
+        if (!valueToFill && questionText && questionText.length > 5) {
             try {
-                console.log('[RESUME_RAG] Searching for answer to:', questionText);
+                console.log('[RESUME_RAG] Searching saved answers for:', questionText);
                 const searchResponse = await apiRequest(
                     `${backendUrl}/api/v1/field-answers/search/by-question?question_text=${encodeURIComponent(questionText)}`
                 );
@@ -890,8 +756,9 @@ async function handleDropdowns(data, backendUrl) {
 
                     if (matches.length > 0) {
                         const bestMatch = matches[0];
-                        console.log('[RESUME_RAG] Found saved answer for combobox ' + fieldId + ': ' + bestMatch.answer_text + ' (score: ' + bestMatch.score + ')');
-                        dropdownConfig[fieldId] = bestMatch.answer_text;
+                        valueToFill = bestMatch.answer_text;
+                        valueSource = 'saved';
+                        console.log('[RESUME_RAG] Found saved answer:', valueToFill, '(score: ' + bestMatch.score + ')');
                     } else {
                         console.log('[RESUME_RAG] No matches found for:', questionText.substring(0, 30));
                     }
@@ -899,21 +766,29 @@ async function handleDropdowns(data, backendUrl) {
                     console.log('[RESUME_RAG] Search request failed:', searchResponse.status);
                 }
             } catch (err) {
-                console.log('[RESUME_RAG] Error searching for combobox answer:', err.message);
+                console.log('[RESUME_RAG] Error searching for answer:', err.message);
             }
-        } else {
-            console.log('[RESUME_RAG] Skipping search for field', fieldId, '- question text too short or empty');
+        } else if (!valueToFill) {
+            console.log('[RESUME_RAG] Skipping - no resume match and question text too short');
+        }
+
+        // Add to config if we found a value
+        if (valueToFill) {
+            dropdownConfig[fieldId] = { value: valueToFill, source: valueSource };
         }
     }
 
     console.log('[RESUME_RAG] Configured React Select dropdowns:', Object.keys(dropdownConfig).length);
 
     // Process each React Select dropdown sequentially
-    for (const [fieldId, targetValue] of Object.entries(dropdownConfig)) {
+    for (const [fieldId, config] of Object.entries(dropdownConfig)) {
         const input = document.querySelector(`input#${CSS.escape(fieldId)}`);
         if (!input) continue;
 
-        console.log('[RESUME_RAG] Dropdown: ' + fieldId + ' -> ' + targetValue);
+        const targetValue = config.value;
+        const source = config.source;
+
+        console.log('[RESUME_RAG] Dropdown: ' + fieldId + ' -> ' + targetValue + ' (from ' + source + ')');
 
         // Focus the input
         input.focus();
