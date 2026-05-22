@@ -284,8 +284,7 @@ function extractCompanyName() {
         }
     }
 
-    // 6. Check hostname as fallback
-    const hostname = window.location.hostname;
+    // 6. Check hostname as fallback (hostname already declared at top of function)
     const domain = hostname.replace(/^(www\.|jobs\.|careers\.)/, '');
     const companyFromDomain = domain.split('.')[0];
 
