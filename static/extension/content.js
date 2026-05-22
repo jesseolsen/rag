@@ -1378,12 +1378,25 @@ async function captureAnswersFromCurrentForm(backendUrl, filledFields) {
         // If no sibling has question, traverse up to find question text in parent containers
         depth = 0;
         current = elem.parentElement;
-        while (current && !questionText && depth < 10) {
-            const allText = current.textContent?.substring(0, 400) || '';
-            if (allText.includes('?')) {
-                questionText = allText.trim();
+        while (current && !questionText && depth < 5) {
+            // Look for a label element first
+            const label = current.querySelector('label');
+            if (label && label.textContent?.includes('?')) {
+                questionText = label.textContent.trim();
                 break;
             }
+
+            // Otherwise check immediate children for question text (not ALL descendants)
+            for (const child of current.children || []) {
+                if (child === elem || child.contains(elem)) continue; // Skip the Yes/No element itself
+                const text = child.textContent?.trim() || '';
+                if (text.includes('?') && text.length < 200) {
+                    questionText = text;
+                    break;
+                }
+            }
+
+            if (questionText) break;
             current = current.parentElement;
             depth++;
         }
