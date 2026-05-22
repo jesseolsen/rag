@@ -175,6 +175,131 @@ class GoogleSheetsService:
             print(f"[GOOGLE_SHEETS] Error reading spreadsheet: {e}")
             return False
 
+    def update_glassdoor_data(
+        self,
+        spreadsheet_url: str,
+        company_name: str,
+        rating: float,
+        review_count: Optional[int] = None,
+        glassdoor_url: Optional[str] = None
+    ) -> bool:
+        """Update a company's row with Glassdoor rating data.
+
+        Args:
+            spreadsheet_url: The Google Sheets URL
+            company_name: Name of the company to update
+            rating: Glassdoor rating (0-5)
+            review_count: Number of reviews (optional)
+            glassdoor_url: URL to the Glassdoor page (optional)
+
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self.service:
+            print("[GOOGLE_SHEETS] Service not initialized. Check credentials file.")
+            return False
+
+        spreadsheet_id = self.extract_spreadsheet_id(spreadsheet_url)
+        if not spreadsheet_id:
+            print(f"[GOOGLE_SHEETS] Could not extract spreadsheet ID from URL: {spreadsheet_url}")
+            return False
+
+        # Get sheet name
+        gid = self.extract_gid(spreadsheet_url)
+        sheet_name = self.get_sheet_name_from_gid(spreadsheet_id, gid) if gid else None
+
+        if not sheet_name:
+            try:
+                spreadsheet = self.service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+                sheets = spreadsheet.get('sheets', [])
+                if sheets:
+                    sheet_name = sheets[0]['properties']['title']
+                else:
+                    print("[GOOGLE_SHEETS] No sheets found in spreadsheet")
+                    return False
+            except HttpError as e:
+                print(f"[GOOGLE_SHEETS] Error getting spreadsheet info: {e}")
+                return False
+
+        try:
+            # Read all values to find the company row
+            result = self.service.spreadsheets().values().get(
+                spreadsheetId=spreadsheet_id,
+                range=f'{sheet_name}!A:Z'
+            ).execute()
+
+            values = result.get('values', [])
+            if not values:
+                print("[GOOGLE_SHEETS] No data in spreadsheet")
+                return False
+
+            # Find the row with matching company name
+            company_name_lower = company_name.lower().strip()
+            row_index = None
+
+            for i, row in enumerate(values):
+                if not row:
+                    continue
+
+                # Check first column for company name
+                cell_value = row[0] if len(row) > 0 else ''
+
+                # Extract text from HYPERLINK formula if present
+                if isinstance(cell_value, str):
+                    if cell_value.startswith('=HYPERLINK'):
+                        match = re.search(r'"([^"]*)"[^"]*$', cell_value)
+                        if match:
+                            display_text = match.group(1)
+                            if display_text.lower().strip() == company_name_lower:
+                                row_index = i
+                                break
+                    else:
+                        if cell_value.lower().strip() == company_name_lower:
+                            row_index = i
+                            break
+
+            if row_index is None:
+                print(f"[GOOGLE_SHEETS] Company '{company_name}' not found in spreadsheet")
+                return False
+
+            # Determine which columns to update
+            # Assuming columns: A=Company, B=Position, C=Date, D=Status, E=Notes, F=Glassdoor Rating, G=Review Count
+            # Adjust based on your actual spreadsheet structure
+
+            # Get the current row to preserve existing data
+            current_row = values[row_index]
+
+            # Ensure row has enough columns
+            while len(current_row) < 7:
+                current_row.append('')
+
+            # Update Glassdoor columns (F and G, which are indices 5 and 6)
+            current_row[5] = rating  # Column F: Glassdoor Rating
+            if review_count is not None:
+                current_row[6] = review_count  # Column G: Review Count
+
+            # Update the row
+            row_number = row_index + 1
+            update_range = f'{sheet_name}!A{row_number}:G{row_number}'
+
+            body = {
+                'values': [current_row[:7]]  # Only update first 7 columns
+            }
+
+            self.service.spreadsheets().values().update(
+                spreadsheetId=spreadsheet_id,
+                range=update_range,
+                valueInputOption='USER_ENTERED',
+                body=body
+            ).execute()
+
+            print(f"[GOOGLE_SHEETS] ✓ Updated Glassdoor data for {company_name}: {rating} stars ({review_count} reviews)")
+            return True
+
+        except HttpError as e:
+            print(f"[GOOGLE_SHEETS] Error updating Glassdoor data: {e}")
+            return False
+
     def add_job_application(
         self,
         spreadsheet_url: str,

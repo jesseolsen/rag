@@ -155,3 +155,65 @@ async def check_company_exists(company_name: str):
         "exists": exists,
         "company_name": company_name
     }
+
+
+class GlassdoorUpdateRequest(BaseModel):
+    """Request to update spreadsheet with Glassdoor data."""
+    companyName: str
+    rating: float
+    reviewCount: Optional[int] = None
+    glassdoorUrl: Optional[str] = None
+
+
+@router.post("/update-glassdoor")
+async def update_glassdoor_data(request: GlassdoorUpdateRequest):
+    """Update spreadsheet with Glassdoor rating data.
+
+    This endpoint is called when the extension detects the user is viewing
+    a company's Glassdoor page. It updates the corresponding row in the
+    spreadsheet with the rating and review count.
+
+    Args:
+        request: Glassdoor data including company name, rating, review count
+
+    Returns:
+        Dict with updated (bool) and details about what was updated
+    """
+    # Check if Google Sheets integration is enabled
+    spreadsheet_url = settings.google_spreadsheet
+    if not spreadsheet_url:
+        return {
+            "updated": False,
+            "message": "Google Sheets integration not configured"
+        }
+
+    # Get sheets service
+    sheets_service = get_sheets_service()
+    if not sheets_service:
+        return {
+            "updated": False,
+            "message": "Google Sheets service not available"
+        }
+
+    # Update the spreadsheet with Glassdoor data
+    success = sheets_service.update_glassdoor_data(
+        spreadsheet_url=spreadsheet_url,
+        company_name=request.companyName,
+        rating=request.rating,
+        review_count=request.reviewCount,
+        glassdoor_url=request.glassdoorUrl
+    )
+
+    if success:
+        return {
+            "updated": True,
+            "message": f"Updated {request.companyName} with rating {request.rating}",
+            "company_name": request.companyName,
+            "rating": request.rating,
+            "review_count": request.reviewCount
+        }
+    else:
+        return {
+            "updated": False,
+            "message": f"Company {request.companyName} not found in spreadsheet or update failed"
+        }

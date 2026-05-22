@@ -1840,3 +1840,232 @@ async function captureAnswersFromCurrentForm(backendUrl, filledFields) {
         message: `Captured ${capturedCount} new or modified answer${capturedCount !== 1 ? 's' : ''}`
     };
 }
+
+// ============================================================================
+// GLASSDOOR AUTO-UPDATE FEATURE
+// ============================================================================
+
+// Detect if we're on a Glassdoor company overview page and extract rating
+function detectGlassdoorPage() {
+    const url = window.location.href;
+    const hostname = window.location.hostname;
+
+    // Check if we're on Glassdoor
+    if (!hostname.includes('glassdoor.com')) {
+        return null;
+    }
+
+    // Check if we're on an Overview or Reviews page
+    if (!url.includes('/Overview/Working-at-') && !url.includes('/Reviews/')) {
+        return null;
+    }
+
+    console.log('[RESUME_RAG] Detected Glassdoor company page');
+
+    // Extract company name from the page
+    let companyName = null;
+
+    // Method 1: From page title
+    const titleMatch = document.title.match(/(.+?)\s+(?:Overview|Reviews)/i);
+    if (titleMatch) {
+        companyName = titleMatch[1].trim();
+    }
+
+    // Method 2: From h1 heading
+    if (!companyName) {
+        const h1 = document.querySelector('h1');
+        if (h1) {
+            companyName = h1.textContent.trim();
+        }
+    }
+
+    // Method 3: From URL
+    if (!companyName) {
+        const urlMatch = url.match(/Working-at-(.+?)-EI_/);
+        if (urlMatch) {
+            companyName = urlMatch[1].replace(/-/g, ' ');
+        }
+    }
+
+    if (!companyName) {
+        console.log('[RESUME_RAG] Could not extract company name from Glassdoor page');
+        return null;
+    }
+
+    // Extract rating and review count
+    let rating = null;
+    let reviewCount = null;
+
+    // Method 1: Look for JSON-LD structured data
+    const scriptTags = document.querySelectorAll('script[type="application/ld+json"]');
+    for (const script of scriptTags) {
+        try {
+            const data = JSON.parse(script.textContent);
+            if (data.aggregateRating) {
+                rating = parseFloat(data.aggregateRating.ratingValue);
+                reviewCount = parseInt(data.aggregateRating.reviewCount);
+                console.log('[RESUME_RAG] Found rating in JSON-LD:', rating, reviewCount);
+                break;
+            }
+        } catch (e) {
+            // Continue to next script tag
+        }
+    }
+
+    // Method 2: Look for rating in visible elements
+    if (!rating) {
+        // Try data-test attribute
+        let ratingElem = document.querySelector('[data-test="rating"]');
+        if (ratingElem) {
+            const ratingText = ratingElem.textContent.trim();
+            const ratingMatch = ratingText.match(/(\d+\.?\d*)/);
+            if (ratingMatch) {
+                rating = parseFloat(ratingMatch[1]);
+                console.log('[RESUME_RAG] Found rating in data-test:', rating);
+            }
+        }
+    }
+
+    // Method 3: Search page text for rating
+    if (!rating) {
+        const pageText = document.body.textContent;
+        const ratingMatch = pageText.match(/(\d+\.\d+)\s*(?:out of 5|★)/);
+        if (ratingMatch) {
+            rating = parseFloat(ratingMatch[1]);
+            console.log('[RESUME_RAG] Found rating in page text:', rating);
+        }
+    }
+
+    // Extract review count if not found yet
+    if (!reviewCount) {
+        const pageText = document.body.textContent;
+        const reviewMatch = pageText.match(/([\d,]+)\s*(?:reviews?|ratings?)/i);
+        if (reviewMatch) {
+            reviewCount = parseInt(reviewMatch[1].replace(/,/g, ''));
+            console.log('[RESUME_RAG] Found review count:', reviewCount);
+        }
+    }
+
+    if (!rating) {
+        console.log('[RESUME_RAG] Could not extract rating from Glassdoor page');
+        return null;
+    }
+
+    return {
+        companyName: companyName,
+        rating: rating,
+        reviewCount: reviewCount,
+        glassdoorUrl: url
+    };
+}
+
+// Send Glassdoor data to backend to update spreadsheet
+async function updateSpreadsheetWithGlassdoor(glassdoorData) {
+    try {
+        console.log('[RESUME_RAG] Sending Glassdoor data to backend:', glassdoorData);
+
+        const response = await apiRequest(
+            `${window.RESUME_RAG_BACKEND_URL}/api/v1/tracking/update-glassdoor`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(glassdoorData)
+            }
+        );
+
+        const result = await response.json();
+        console.log('[RESUME_RAG] Glassdoor update result:', result);
+
+        if (result.updated) {
+            // Show a subtle notification
+            showGlassdoorUpdateNotification(glassdoorData.companyName, glassdoorData.rating);
+        }
+
+        return result;
+    } catch (error) {
+        console.log('[RESUME_RAG] Error updating spreadsheet with Glassdoor data:', error);
+        return { updated: false, error: error.message };
+    }
+}
+
+// Show a subtle notification when Glassdoor data is captured
+function showGlassdoorUpdateNotification(companyName, rating) {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #4caf50;
+        color: white;
+        padding: 12px 20px;
+        border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 999999;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 14px;
+        animation: slideIn 0.3s ease-out;
+    `;
+    notification.innerHTML = `
+        ✓ Updated spreadsheet: ${companyName} (★ ${rating})
+    `;
+
+    // Add animation
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes slideIn {
+            from { transform: translateX(400px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideOut {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(400px); opacity: 0; }
+        }
+    `;
+    document.head.appendChild(style);
+
+    document.body.appendChild(notification);
+
+    // Remove after 4 seconds
+    setTimeout(() => {
+        notification.style.animation = 'slideOut 0.3s ease-out';
+        setTimeout(() => notification.remove(), 300);
+    }, 4000);
+}
+
+// Check for Glassdoor data on page load and after dynamic content loads
+let glassdoorCheckTimer = null;
+let glassdoorDataSent = false;
+
+function checkAndUpdateGlassdoor() {
+    if (glassdoorDataSent) return;
+
+    const glassdoorData = detectGlassdoorPage();
+    if (glassdoorData) {
+        glassdoorDataSent = true;
+        updateSpreadsheetWithGlassdoor(glassdoorData);
+    }
+}
+
+// Run check after page loads
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        setTimeout(checkAndUpdateGlassdoor, 2000); // Wait for dynamic content
+    });
+} else {
+    setTimeout(checkAndUpdateGlassdoor, 2000);
+}
+
+// Also check when page content changes (for SPAs)
+const glassdoorObserver = new MutationObserver(() => {
+    if (glassdoorCheckTimer) clearTimeout(glassdoorCheckTimer);
+    glassdoorCheckTimer = setTimeout(checkAndUpdateGlassdoor, 1000);
+});
+
+if (window.location.hostname.includes('glassdoor.com')) {
+    glassdoorObserver.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+}
