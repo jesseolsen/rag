@@ -93,6 +93,7 @@ async function checkServerConnection() {
 async function loadCompanyName() {
     try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        console.log('[POPUP] Requesting company name from tab:', tab.id);
 
         chrome.tabs.sendMessage(tab.id, {
             action: 'getCompanyName'
@@ -102,6 +103,8 @@ async function loadCompanyName() {
                 return;
             }
 
+            console.log('[POPUP] Company name response:', response);
+
             if (response && response.success && response.companyName) {
                 const companyDisplay = document.getElementById('companyNameDisplay');
                 const companyValue = document.getElementById('companyNameValue');
@@ -109,7 +112,9 @@ async function loadCompanyName() {
                 companyValue.textContent = response.companyName;
                 companyDisplay.classList.add('visible');
 
-                console.log('[POPUP] Company name:', response.companyName);
+                console.log('[POPUP] Company name displayed:', response.companyName);
+            } else {
+                console.log('[POPUP] No company name detected');
             }
         });
     } catch (error) {

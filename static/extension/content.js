@@ -190,13 +190,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // Helper function to extract company name from page
 function extractCompanyName() {
     // Try multiple strategies to find company name
+    console.log('[RESUME_RAG] Extracting company name from:', window.location.href);
 
     // 1. Check URL path for company name (e.g., careers-page.com/COMPANY/job/...)
     const url = window.location.href;
     const pathname = window.location.pathname;
 
-    // Pattern: /company-name/job or /company-name/apply or similar
-    const pathMatch = pathname.match(/^\/([^\/]+)\/(job|apply|careers|positions)/i);
+    // Pattern: /company-name/job or /company-name/apply or similar (handles plural forms)
+    const pathMatch = pathname.match(/^\/([^\/]+)\/(jobs?|apply|careers|positions?)/i);
+    console.log('[RESUME_RAG] Path match result:', pathMatch);
     if (pathMatch && pathMatch[1]) {
         const companySlug = pathMatch[1];
         // Convert slug to proper name: "elsa-corp" -> "Elsa Corp"
