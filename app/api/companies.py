@@ -21,16 +21,32 @@ async def get_glassdoor_rating(company_name: str):
         Dict with rating, review_count, and glassdoor_url if found
     """
     try:
-        # Search for the company on Glassdoor
-        search_url = f"https://www.glassdoor.com/Search/results.htm?keyword={urllib.parse.quote(company_name)}"
+        # Try to get company overview page directly using common URL pattern
+        # This is more likely to succeed than search
+        company_slug = company_name.lower().replace(' ', '-').replace(',', '').replace('.', '')
+        overview_url = f"https://www.glassdoor.com/Overview/Working-at-{company_slug}-EI_IE.htm"
 
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Cache-Control': 'max-age=0',
         }
 
-        response = requests.get(search_url, headers=headers, timeout=10)
+        # Try direct overview page first
+        response = requests.get(overview_url, headers=headers, timeout=10, allow_redirects=True)
+
+        # If direct URL doesn't work (404/403), try search
+        if response.status_code in [403, 404]:
+            search_url = f"https://www.glassdoor.com/Search/results.htm?keyword={urllib.parse.quote(company_name)}"
+            response = requests.get(search_url, headers=headers, timeout=10, allow_redirects=True)
 
         if response.status_code != 200:
             return {

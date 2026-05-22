@@ -222,7 +222,7 @@ async function loadGlassdoorRating(companyName) {
 
         if (!response.ok) {
             console.log('[POPUP] Failed to fetch Glassdoor rating');
-            ratingContainer.style.display = 'none';
+            showGlassdoorSearchLink(companyName, ratingContainer);
             return;
         }
 
@@ -238,13 +238,23 @@ async function loadGlassdoorRating(companyName) {
                 </a>
             `;
         } else {
-            // Don't show anything if rating not found
-            ratingContainer.style.display = 'none';
+            // Show manual search link if automatic fetch failed
+            showGlassdoorSearchLink(companyName, ratingContainer);
         }
     } catch (error) {
         console.log('[POPUP] Error loading Glassdoor rating:', error);
-        ratingContainer.style.display = 'none';
+        showGlassdoorSearchLink(companyName, ratingContainer);
     }
+}
+
+function showGlassdoorSearchLink(companyName, container) {
+    const searchUrl = `https://www.glassdoor.com/Search/results.htm?keyword=${encodeURIComponent(companyName)}`;
+    container.innerHTML = `
+        <span>Glassdoor:</span>
+        <a href="${searchUrl}" target="_blank" rel="noopener">
+            Search reviews →
+        </a>
+    `;
 }
 
 async function getStoredResumeOrder() {
