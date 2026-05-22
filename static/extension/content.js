@@ -534,9 +534,12 @@ async function fillForm(resumeData, resumeOrder, backendUrl) {
         let totalFilled = filledCount + dropdownCount;
 
         // Handle file inputs (if resumeOrder is provided)
+        console.log('[RESUME_RAG] Resume order for file uploads:', resumeOrder?.length || 0, 'items');
         if (resumeOrder && resumeOrder.length > 0) {
             const fileCount = await handleFileInputs(resumeOrder, backendUrl);
             totalFilled += fileCount;
+        } else {
+            console.log('[RESUME_RAG] ⚠️ No resumeOrder provided, skipping file uploads');
         }
 
         console.log('[RESUME_RAG] Total filled:', totalFilled);
@@ -1015,18 +1018,22 @@ function sleep(ms) {
 }
 
 async function handleFileInputs(resumeOrder, backendUrl) {
+    console.log('[RESUME_RAG] handleFileInputs called with', resumeOrder.length, 'resumes');
     let fileCount = 0;
 
     // Find enabled resumes
     const enabledResumes = resumeOrder.filter(r => r.enabled);
+    console.log('[RESUME_RAG] Found', enabledResumes.length, 'enabled resumes');
     if (enabledResumes.length === 0) return 0;
 
     // Find resumes with matching filenames
     const resumeFile = enabledResumes.find(r => r.filename.toLowerCase().includes('resume'));
     const coverFile = enabledResumes.find(r => r.filename.toLowerCase().includes('cover'));
+    console.log('[RESUME_RAG] Resume file:', resumeFile?.filename, 'Cover file:', coverFile?.filename);
 
     // Process file inputs
     const fileInputs = document.querySelectorAll('input[type="file"]');
+    console.log('[RESUME_RAG] Found', fileInputs.length, 'file input elements');
     const attachmentPromises = [];
 
     fileInputs.forEach(input => {
