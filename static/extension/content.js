@@ -184,13 +184,35 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 function extractCompanyName() {
     // Try multiple strategies to find company name
 
-    // 1. Meta tags
-    const ogSiteName = document.querySelector('meta[property="og:site_name"]')?.content;
-    if (ogSiteName && ogSiteName.length > 2 && ogSiteName.length < 100) {
-        return ogSiteName;
+    // 1. Check URL path for company name (e.g., careers-page.com/COMPANY/job/...)
+    const url = window.location.href;
+    const pathname = window.location.pathname;
+
+    // Pattern: /company-name/job or /company-name/apply or similar
+    const pathMatch = pathname.match(/^\/([^\/]+)\/(job|apply|careers|positions)/i);
+    if (pathMatch && pathMatch[1]) {
+        const companySlug = pathMatch[1];
+        // Convert slug to proper name: "elsa-corp" -> "Elsa Corp"
+        const companyName = companySlug
+            .split(/[-_]/)
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+        if (companyName.length > 2 && !/www|com|org|net|io/i.test(companyName)) {
+            console.log('[RESUME_RAG] Company from URL path:', companyName);
+            return companyName;
+        }
     }
 
-    // 2. Page title - extract company name from patterns like "Company Name - Job Title"
+    // 2. Meta tags (but avoid platform providers like "Manatal", "Greenhouse", etc.)
+    const ogSiteName = document.querySelector('meta[property="og:site_name"]')?.content;
+    if (ogSiteName && ogSiteName.length > 2 && ogSiteName.length < 100) {
+        // Skip if it's a known job platform provider
+        if (!/manatal|greenhouse|lever|workday|taleo|jobvite|icims|smartrecruiters/i.test(ogSiteName)) {
+            return ogSiteName;
+        }
+    }
+
+    // 3. Page title - extract company name from patterns like "Company Name - Job Title"
     const title = document.title;
     if (title) {
         // Try splitting on common separators
@@ -210,7 +232,7 @@ function extractCompanyName() {
         }
     }
 
-    // 3. Look for company name in form fields or labels
+    // 4. Look for company name in form fields or labels
     const companyInputs = document.querySelectorAll('input[name*="company"], input[id*="company"]');
     for (const input of companyInputs) {
         if (input.value && input.value.length > 2) {
@@ -218,7 +240,7 @@ function extractCompanyName() {
         }
     }
 
-    // 4. Check hostname as fallback
+    // 5. Check hostname as fallback
     const hostname = window.location.hostname;
     const domain = hostname.replace(/^(www\.|jobs\.|careers\.)/, '');
     const companyFromDomain = domain.split('.')[0];
