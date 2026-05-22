@@ -114,3 +114,44 @@ async def get_tracking_status():
         "service_initialized": bool(sheets_service),
         "spreadsheet_url": spreadsheet_url if spreadsheet_url else None
     }
+
+
+@router.get("/check-company")
+async def check_company_exists(company_name: str):
+    """Check if a company already exists in the tracking spreadsheet.
+
+    Args:
+        company_name: Name of the company to check
+
+    Returns:
+        Dict with exists (bool) and enabled (bool) flags
+    """
+    # Check if Google Sheets integration is enabled
+    spreadsheet_url = settings.google_spreadsheet
+    if not spreadsheet_url:
+        return {
+            "enabled": False,
+            "exists": False,
+            "message": "Google Sheets integration not configured"
+        }
+
+    # Get sheets service
+    sheets_service = get_sheets_service()
+    if not sheets_service:
+        return {
+            "enabled": False,
+            "exists": False,
+            "message": "Google Sheets service not available"
+        }
+
+    # Check if company exists
+    exists = sheets_service.check_company_exists(
+        spreadsheet_url=spreadsheet_url,
+        company_name=company_name
+    )
+
+    return {
+        "enabled": True,
+        "exists": exists,
+        "company_name": company_name
+    }

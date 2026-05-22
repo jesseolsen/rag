@@ -97,6 +97,84 @@ class GoogleSheetsService:
 
         return None
 
+    def check_company_exists(
+        self,
+        spreadsheet_url: str,
+        company_name: str
+    ) -> bool:
+        """Check if a company name exists in the first column of the spreadsheet.
+
+        Args:
+            spreadsheet_url: The Google Sheets URL
+            company_name: Name of the company to search for
+
+        Returns:
+            True if company exists, False otherwise
+        """
+        if not self.service:
+            print("[GOOGLE_SHEETS] Service not initialized. Check credentials file.")
+            return False
+
+        spreadsheet_id = self.extract_spreadsheet_id(spreadsheet_url)
+        if not spreadsheet_id:
+            print(f"[GOOGLE_SHEETS] Could not extract spreadsheet ID from URL: {spreadsheet_url}")
+            return False
+
+        # Get sheet name from gid or use first sheet
+        gid = self.extract_gid(spreadsheet_url)
+        sheet_name = self.get_sheet_name_from_gid(spreadsheet_id, gid) if gid else None
+
+        if not sheet_name:
+            # Default to first sheet
+            try:
+                spreadsheet = self.service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+                sheets = spreadsheet.get('sheets', [])
+                if sheets:
+                    sheet_name = sheets[0]['properties']['title']
+                else:
+                    print("[GOOGLE_SHEETS] No sheets found in spreadsheet")
+                    return False
+            except HttpError as e:
+                print(f"[GOOGLE_SHEETS] Error getting spreadsheet info: {e}")
+                return False
+
+        try:
+            # Read all values from column A (first column)
+            result = self.service.spreadsheets().values().get(
+                spreadsheetId=spreadsheet_id,
+                range=f'{sheet_name}!A:A'
+            ).execute()
+
+            values = result.get('values', [])
+
+            # Search for company name in the first column
+            # The first column contains HYPERLINK formulas, so we need to check the display text
+            company_name_lower = company_name.lower().strip()
+
+            for row in values:
+                if row:  # Skip empty rows
+                    cell_value = row[0]
+                    # Extract text from HYPERLINK formula if present
+                    # Format: =HYPERLINK("url", "Company Name")
+                    if isinstance(cell_value, str):
+                        if cell_value.startswith('=HYPERLINK'):
+                            # Extract the display text from the formula
+                            match = re.search(r'"([^"]*)"[^"]*$', cell_value)
+                            if match:
+                                display_text = match.group(1)
+                                if display_text.lower().strip() == company_name_lower:
+                                    return True
+                        else:
+                            # Plain text comparison
+                            if cell_value.lower().strip() == company_name_lower:
+                                return True
+
+            return False
+
+        except HttpError as e:
+            print(f"[GOOGLE_SHEETS] Error reading spreadsheet: {e}")
+            return False
+
     def add_job_application(
         self,
         spreadsheet_url: str,

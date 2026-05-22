@@ -97,7 +97,7 @@ async function loadCompanyName() {
 
         chrome.tabs.sendMessage(tab.id, {
             action: 'getCompanyName'
-        }, { frameId: 0 }, (response) => {
+        }, { frameId: 0 }, async (response) => {
             if (chrome.runtime.lastError) {
                 console.log('[POPUP] Could not get company name:', chrome.runtime.lastError.message);
                 return;
@@ -108,17 +108,57 @@ async function loadCompanyName() {
             if (response && response.success && response.companyName) {
                 const companyDisplay = document.getElementById('companyNameDisplay');
                 const companyValue = document.getElementById('companyNameValue');
+                const statusIndicator = document.getElementById('companyStatusIndicator');
 
                 companyValue.textContent = response.companyName;
                 companyDisplay.classList.add('visible');
 
                 console.log('[POPUP] Company name displayed:', response.companyName);
+
+                // Check if company exists in spreadsheet
+                await checkCompanyStatus(response.companyName, statusIndicator);
             } else {
                 console.log('[POPUP] No company name detected');
             }
         });
     } catch (error) {
         console.log('[POPUP] Error loading company name:', error);
+    }
+}
+
+async function checkCompanyStatus(companyName, statusIndicator) {
+    try {
+        const response = await fetch(`${backendUrl}/api/v1/tracking/check-company?company_name=${encodeURIComponent(companyName)}`);
+
+        if (!response.ok) {
+            console.log('[POPUP] Failed to check company status');
+            statusIndicator.style.display = 'none';
+            return;
+        }
+
+        const data = await response.json();
+        console.log('[POPUP] Company status:', data);
+
+        if (!data.enabled) {
+            // Google Sheets not configured, hide indicator
+            statusIndicator.style.display = 'none';
+            return;
+        }
+
+        // Update indicator based on whether company exists
+        statusIndicator.classList.remove('checking');
+
+        if (data.exists) {
+            statusIndicator.classList.add('applied');
+            statusIndicator.title = 'Already applied';
+        } else {
+            statusIndicator.classList.add('new');
+            statusIndicator.title = 'Not yet applied';
+        }
+    } catch (error) {
+        console.log('[POPUP] Error checking company status:', error);
+        // Hide indicator on error
+        statusIndicator.style.display = 'none';
     }
 }
 
