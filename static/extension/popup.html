@@ -441,11 +441,37 @@
         .tab-content.active {
             display: block;
         }
+        .company-name-display {
+            background: #f0f4ff;
+            border: 1px solid #667eea;
+            border-radius: 4px;
+            padding: 8px 12px;
+            margin-bottom: 12px;
+            font-size: 13px;
+            color: #333;
+            display: none;
+        }
+        .company-name-display.visible {
+            display: block;
+        }
+        .company-name-label {
+            font-weight: 600;
+            color: #667eea;
+        }
+        .company-name-value {
+            font-weight: 500;
+            color: #333;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>📋 Resume RAG</h1>
+
+        <div id="companyNameDisplay" class="company-name-display">
+            <span class="company-name-label">Company:</span>
+            <span id="companyNameValue" class="company-name-value"></span>
+        </div>
 
         <div id="serverError" class="server-error" style="display:none;">
             <h3>⚠️ Backend Offline</h3>

@@ -178,6 +178,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         });
         return true; // Keep channel open for async response
     }
+
+    if (request.action === 'getCompanyName') {
+        console.log('[RESUME_RAG] Company name requested');
+        const companyName = extractCompanyName();
+        sendResponse({ success: true, companyName: companyName || null });
+        return true;
+    }
 });
 
 // Helper function to extract company name from page

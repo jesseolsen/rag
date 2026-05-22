@@ -50,6 +50,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadFieldAnswers();
     }
     setupEventListeners();
+
+    // Load company name from current page
+    await loadCompanyName();
 });
 
 async function getStoredBackendUrl() {
@@ -84,6 +87,33 @@ async function checkServerConnection() {
         serverError.style.display = 'block';
         serverLink.href = backendUrl;
         return false;
+    }
+}
+
+async function loadCompanyName() {
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+        chrome.tabs.sendMessage(tab.id, {
+            action: 'getCompanyName'
+        }, { frameId: 0 }, (response) => {
+            if (chrome.runtime.lastError) {
+                console.log('[POPUP] Could not get company name:', chrome.runtime.lastError.message);
+                return;
+            }
+
+            if (response && response.success && response.companyName) {
+                const companyDisplay = document.getElementById('companyNameDisplay');
+                const companyValue = document.getElementById('companyNameValue');
+
+                companyValue.textContent = response.companyName;
+                companyDisplay.classList.add('visible');
+
+                console.log('[POPUP] Company name:', response.companyName);
+            }
+        });
+    } catch (error) {
+        console.log('[POPUP] Error loading company name:', error);
     }
 }
 
