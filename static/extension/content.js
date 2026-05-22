@@ -1067,6 +1067,22 @@ async function handleFileInputs(resumeOrder, backendUrl) {
             if (!label) {
                 label = (input.getAttribute('aria-label') || input.getAttribute('title') || '').toLowerCase();
             }
+
+            // Method 5: look for ANY text in the immediate parent container that might indicate purpose
+            if (!label || label === 'choose file' || label === 'browse') {
+                let parent = input.parentElement;
+                let attempts = 0;
+                while (parent && attempts < 3) {
+                    const text = parent.textContent?.toLowerCase() || '';
+                    // Look for "resume" or "cv" in the parent text
+                    if (/resume|cv|curriculum/i.test(text)) {
+                        label = text.substring(0, 200); // Take first 200 chars to avoid huge strings
+                        break;
+                    }
+                    parent = parent.parentElement;
+                    attempts++;
+                }
+            }
         } catch (e) {}
 
         const context = `${input.id?.toLowerCase() || ''}|${input.name?.toLowerCase() || ''}|${label}`;
