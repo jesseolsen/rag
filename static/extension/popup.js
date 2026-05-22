@@ -122,8 +122,11 @@ async function loadCompanyName() {
                 // Set badge to checking while we verify status
                 updateExtensionBadge('checking');
 
-                // Check if company exists in spreadsheet
-                await checkCompanyStatus(response.companyName, statusIndicator);
+                // Check if company exists in spreadsheet and load Glassdoor rating in parallel
+                await Promise.all([
+                    checkCompanyStatus(response.companyName, statusIndicator),
+                    loadGlassdoorRating(response.companyName)
+                ]);
             } else {
                 console.log('[POPUP] No company name detected');
                 updateExtensionBadge(null);
@@ -201,6 +204,42 @@ function updateExtensionBadge(status) {
         console.log('[POPUP] Extension badge updated:', status);
     } catch (error) {
         console.log('[POPUP] Error updating badge:', error);
+    }
+}
+
+async function loadGlassdoorRating(companyName) {
+    const ratingContainer = document.getElementById('glassdoorRating');
+
+    try {
+        ratingContainer.style.display = 'flex';
+        ratingContainer.innerHTML = '<span class="rating-loading">Loading Glassdoor rating...</span>';
+
+        const response = await fetch(`${backendUrl}/api/v1/companies/glassdoor-rating?company_name=${encodeURIComponent(companyName)}`);
+
+        if (!response.ok) {
+            console.log('[POPUP] Failed to fetch Glassdoor rating');
+            ratingContainer.style.display = 'none';
+            return;
+        }
+
+        const data = await response.json();
+        console.log('[POPUP] Glassdoor rating:', data);
+
+        if (data.found && data.rating) {
+            const reviewText = data.review_count ? ` (${data.review_count} reviews)` : '';
+            ratingContainer.innerHTML = `
+                <span>Glassdoor:</span>
+                <a href="${data.glassdoor_url}" target="_blank" rel="noopener">
+                    <span class="rating-star">★</span> ${data.rating.toFixed(1)}${reviewText}
+                </a>
+            `;
+        } else {
+            // Don't show anything if rating not found
+            ratingContainer.style.display = 'none';
+        }
+    } catch (error) {
+        console.log('[POPUP] Error loading Glassdoor rating:', error);
+        ratingContainer.style.display = 'none';
     }
 }
 

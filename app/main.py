@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from app.models.schemas import HealthResponse
-from app.api import resume, generation, search, forms, field_answers, tracking
+from app.api import resume, generation, search, forms, field_answers, tracking, companies
 import os
 
 app = FastAPI(
@@ -28,6 +28,7 @@ app.include_router(search.router)
 app.include_router(forms.router)
 app.include_router(field_answers.router)
 app.include_router(tracking.router)
+app.include_router(companies.router)
 
 
 @app.get("/", response_model=HealthResponse)
