@@ -1872,35 +1872,51 @@ function detectGlassdoorPage() {
         return null;
     }
 
-    // Check if we're on an Overview or Reviews page
-    if (!url.includes('/Overview/Working-at-') && !url.includes('/Reviews/')) {
+    // Check if we're on an Overview, Reviews, or Search results page
+    const isOverviewPage = url.includes('/Overview/Working-at-') || url.includes('/Reviews/');
+    const isSearchPage = url.includes('/Search/results.htm');
+
+    if (!isOverviewPage && !isSearchPage) {
         return null;
     }
 
-    console.log('[RESUME_RAG] Detected Glassdoor company page');
+    console.log('[RESUME_RAG] Detected Glassdoor page:', isSearchPage ? 'search results' : 'company page');
 
     // Extract company name from the page
     let companyName = null;
 
-    // Method 1: From page title
-    const titleMatch = document.title.match(/(.+?)\s+(?:Overview|Reviews)/i);
-    if (titleMatch) {
-        companyName = titleMatch[1].trim();
-    }
-
-    // Method 2: From h1 heading
-    if (!companyName) {
-        const h1 = document.querySelector('h1');
-        if (h1) {
-            companyName = h1.textContent.trim();
+    // For search results pages, extract from URL parameter
+    if (isSearchPage) {
+        const urlParams = new URLSearchParams(window.location.search);
+        const keyword = urlParams.get('keyword');
+        if (keyword) {
+            companyName = keyword;
+            console.log('[RESUME_RAG] Company from search keyword:', companyName);
         }
     }
 
-    // Method 3: From URL
+    // For overview/reviews pages
     if (!companyName) {
-        const urlMatch = url.match(/Working-at-(.+?)-EI_/);
-        if (urlMatch) {
-            companyName = urlMatch[1].replace(/-/g, ' ');
+        // Method 1: From page title
+        const titleMatch = document.title.match(/(.+?)\s+(?:Overview|Reviews)/i);
+        if (titleMatch) {
+            companyName = titleMatch[1].trim();
+        }
+
+        // Method 2: From h1 heading
+        if (!companyName) {
+            const h1 = document.querySelector('h1');
+            if (h1) {
+                companyName = h1.textContent.trim();
+            }
+        }
+
+        // Method 3: From URL
+        if (!companyName) {
+            const urlMatch = url.match(/Working-at-(.+?)-EI_/);
+            if (urlMatch) {
+                companyName = urlMatch[1].replace(/-/g, ' ');
+            }
         }
     }
 
@@ -1912,6 +1928,29 @@ function detectGlassdoorPage() {
     // Extract rating and review count
     let rating = null;
     let reviewCount = null;
+
+    // For search results pages, extract from company card
+    if (isSearchPage && companyName) {
+        // Look for the company card in search results
+        const pageText = document.body.textContent;
+
+        // Try to find rating next to company name (e.g., "Panopto 3.9★")
+        const ratingPattern = new RegExp(companyName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s+(\\d+\\.\\d+)\\s*★', 'i');
+        const ratingMatch = pageText.match(ratingPattern);
+        if (ratingMatch) {
+            rating = parseFloat(ratingMatch[1]);
+            console.log('[RESUME_RAG] Found rating in search results:', rating);
+        }
+
+        // Try to find review count (e.g., "128 reviews")
+        // Look for pattern near the company name
+        const reviewPattern = /(\\d+)\\s*reviews?/i;
+        const reviewMatch = pageText.match(reviewPattern);
+        if (reviewMatch) {
+            reviewCount = parseInt(reviewMatch[1]);
+            console.log('[RESUME_RAG] Found review count in search results:', reviewCount);
+        }
+    }
 
     // Method 1: Look for JSON-LD structured data
     const scriptTags = document.querySelectorAll('script[type="application/ld+json"]');
