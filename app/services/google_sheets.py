@@ -7,6 +7,8 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
+from app.config import settings
+
 
 class GoogleSheetsService:
     """Service for interacting with Google Sheets API."""
@@ -16,9 +18,9 @@ class GoogleSheetsService:
 
         Args:
             credentials_file: Path to service account JSON credentials file.
-                            If None, will look for GOOGLE_SHEETS_CREDENTIALS_FILE env var.
+                            If None, will look for credentials from settings.
         """
-        self.credentials_file = credentials_file or os.getenv('GOOGLE_SHEETS_CREDENTIALS_FILE')
+        self.credentials_file = credentials_file or settings.google_sheets_credentials_file
         self.service = None
 
         if self.credentials_file and os.path.exists(self.credentials_file):

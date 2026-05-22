@@ -7,6 +7,7 @@ import os
 from datetime import datetime
 
 from app.services.google_sheets import get_sheets_service
+from app.config import settings
 
 
 router = APIRouter(prefix="/api/v1/tracking", tags=["tracking"])
@@ -42,7 +43,7 @@ async def track_job_application(request: JobApplicationRequest):
         - GOOGLE_SHEETS_CREDENTIALS_FILE env variable with path to service account JSON
     """
     # Check if Google Sheets integration is enabled
-    spreadsheet_url = os.getenv('GOOGLE_SPREADSHEET')
+    spreadsheet_url = settings.google_spreadsheet
     if not spreadsheet_url:
         return JobApplicationResponse(
             success=False,
@@ -101,8 +102,8 @@ async def track_job_application(request: JobApplicationRequest):
 @router.get("/status")
 async def get_tracking_status():
     """Get the status of Google Sheets tracking integration."""
-    spreadsheet_url = os.getenv('GOOGLE_SPREADSHEET')
-    credentials_file = os.getenv('GOOGLE_SHEETS_CREDENTIALS_FILE')
+    spreadsheet_url = settings.google_spreadsheet
+    credentials_file = settings.google_sheets_credentials_file
 
     sheets_service = get_sheets_service()
 
