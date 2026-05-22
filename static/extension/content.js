@@ -176,6 +176,83 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 });
 
+// Helper function to extract company name from page
+function extractCompanyName() {
+    // Try multiple strategies to find company name
+
+    // 1. Meta tags
+    const ogSiteName = document.querySelector('meta[property="og:site_name"]')?.content;
+    if (ogSiteName && ogSiteName.length > 2 && ogSiteName.length < 100) {
+        return ogSiteName;
+    }
+
+    // 2. Page title - extract company name from patterns like "Company Name - Job Title"
+    const title = document.title;
+    if (title) {
+        // Try splitting on common separators
+        const parts = title.split(/[\|\-–—]/);
+        if (parts.length > 1) {
+            // Usually company name is at the end or beginning
+            const lastPart = parts[parts.length - 1].trim();
+            const firstPart = parts[0].trim();
+
+            // Prefer the part that doesn't contain common job-related words
+            if (!/job|career|application|apply|hiring|position/i.test(lastPart) && lastPart.length < 50) {
+                return lastPart;
+            }
+            if (!/job|career|application|apply|hiring|position/i.test(firstPart) && firstPart.length < 50) {
+                return firstPart;
+            }
+        }
+    }
+
+    // 3. Look for company name in form fields or labels
+    const companyInputs = document.querySelectorAll('input[name*="company"], input[id*="company"]');
+    for (const input of companyInputs) {
+        if (input.value && input.value.length > 2) {
+            return input.value.trim();
+        }
+    }
+
+    // 4. Check hostname as fallback
+    const hostname = window.location.hostname;
+    const domain = hostname.replace(/^(www\.|jobs\.|careers\.)/, '');
+    const companyFromDomain = domain.split('.')[0];
+
+    // Capitalize first letter
+    return companyFromDomain.charAt(0).toUpperCase() + companyFromDomain.slice(1);
+}
+
+// Helper function to track job application in Google Sheets
+async function trackJobApplication(backendUrl) {
+    try {
+        const companyName = extractCompanyName();
+        const jobUrl = window.location.href;
+
+        console.log('[RESUME_RAG] Tracking job application:', companyName, 'at', jobUrl);
+
+        const response = await apiRequest(`${backendUrl}/api/v1/tracking/job-application`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                company_name: companyName,
+                job_url: jobUrl
+            })
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+                console.log('[RESUME_RAG] ✓ Tracked application to:', companyName);
+            } else {
+                console.log('[RESUME_RAG] Tracking not enabled:', data.message);
+            }
+        }
+    } catch (err) {
+        console.log('[RESUME_RAG] Error tracking job application:', err.message);
+    }
+}
+
 // Auto-capture answers on form submission
 document.addEventListener('submit', async (e) => {
     console.log('[RESUME_RAG] Form submission detected - auto-capturing answers');
@@ -184,6 +261,9 @@ document.addEventListener('submit', async (e) => {
     try {
         const result = await captureAnswersFromCurrentForm(backendUrl, window.RESUME_RAG_FILLED_FIELDS);
         console.log('[RESUME_RAG] ✓ Auto-captured on submit:', result.capturedCount, 'answers');
+
+        // Track job application in Google Sheets
+        await trackJobApplication(backendUrl);
     } catch (err) {
         console.log('[RESUME_RAG] Error auto-capturing on submit:', err.message);
     }
@@ -204,6 +284,11 @@ document.addEventListener('click', async (e) => {
         try {
             const result = await captureAnswersFromCurrentForm(backendUrl, window.RESUME_RAG_FILLED_FIELDS);
             console.log('[RESUME_RAG] ✓ Auto-captured on button click:', result.capturedCount, 'answers');
+
+            // Track job application in Google Sheets (only on submit/apply buttons, not continue)
+            if (/submit|apply|send/i.test(buttonText)) {
+                await trackJobApplication(backendUrl);
+            }
         } catch (err) {
             console.log('[RESUME_RAG] Error auto-capturing on click:', err.message);
         }
