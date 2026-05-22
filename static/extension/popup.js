@@ -98,40 +98,44 @@ async function loadCompanyName() {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         console.log('[POPUP] Requesting company name from tab:', tab.id);
 
-        chrome.tabs.sendMessage(tab.id, {
-            action: 'getCompanyName'
-        }, { frameId: 0 }, async (response) => {
-            if (chrome.runtime.lastError) {
-                console.log('[POPUP] Could not get company name:', chrome.runtime.lastError.message);
-                updateExtensionBadge(null);
-                return;
-            }
-
-            console.log('[POPUP] Company name response:', response);
-
-            if (response && response.success && response.companyName) {
-                const companyDisplay = document.getElementById('companyNameDisplay');
-                const companyValue = document.getElementById('companyNameValue');
-                const statusIndicator = document.getElementById('companyStatusIndicator');
-
-                companyValue.textContent = response.companyName;
-                companyDisplay.classList.add('visible');
-
-                console.log('[POPUP] Company name displayed:', response.companyName);
-
-                // Set badge to checking while we verify status
-                updateExtensionBadge('checking');
-
-                // Check if company exists in spreadsheet and load Glassdoor rating in parallel
-                await Promise.all([
-                    checkCompanyStatus(response.companyName, statusIndicator),
-                    loadGlassdoorRating(response.companyName)
-                ]);
-            } else {
-                console.log('[POPUP] No company name detected');
-                updateExtensionBadge(null);
-            }
+        // Use Promise wrapper to properly handle async operations
+        const response = await new Promise((resolve) => {
+            chrome.tabs.sendMessage(tab.id, {
+                action: 'getCompanyName'
+            }, { frameId: 0 }, (response) => {
+                if (chrome.runtime.lastError) {
+                    console.log('[POPUP] Could not get company name:', chrome.runtime.lastError.message);
+                    resolve(null);
+                    return;
+                }
+                resolve(response);
+            });
         });
+
+        console.log('[POPUP] Company name response:', response);
+
+        if (response && response.success && response.companyName) {
+            const companyDisplay = document.getElementById('companyNameDisplay');
+            const companyValue = document.getElementById('companyNameValue');
+            const statusIndicator = document.getElementById('companyStatusIndicator');
+
+            companyValue.textContent = response.companyName;
+            companyDisplay.classList.add('visible');
+
+            console.log('[POPUP] Company name displayed:', response.companyName);
+
+            // Set badge to checking while we verify status
+            updateExtensionBadge('checking');
+
+            // Check if company exists in spreadsheet and load Glassdoor rating in parallel
+            await Promise.all([
+                checkCompanyStatus(response.companyName, statusIndicator),
+                loadGlassdoorRating(response.companyName)
+            ]);
+        } else {
+            console.log('[POPUP] No company name detected');
+            updateExtensionBadge(null);
+        }
     } catch (error) {
         console.log('[POPUP] Error loading company name:', error);
         updateExtensionBadge(null);
