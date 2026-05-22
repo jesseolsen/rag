@@ -479,11 +479,14 @@ async function fillForm(resumeData, resumeOrder, backendUrl) {
                 const dd = String(today.getDate()).padStart(2, '0');
                 const yyyy = today.getFullYear();
                 value = `${mm}/${dd}/${yyyy}`;
+            } else if (/full.?name|name/i.test(context) && !/first|last|middle|company|business/i.test(context)) {
+                // Combined full name field (e.g., "Full Name" or "Name")
+                value = `${data.first} ${data.last}`.trim();
             } else if (/last.?name|lname|surname/i.test(context)) {
                 value = data.last;
             } else if (/first.?name|fname/i.test(context)) {
                 value = data.first;
-            } else if (/^email/i.test(context)) {
+            } else if (/email/i.test(context)) {
                 value = data.email;
             } else if (/phone|telephone|mobile|cell/i.test(context)) {
                 value = data.phone;
