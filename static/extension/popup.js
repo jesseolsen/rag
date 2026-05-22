@@ -237,8 +237,16 @@ async function loadGlassdoorRating(companyName) {
                     <span class="rating-star">★</span> ${data.rating.toFixed(1)}${reviewText}
                 </a>
             `;
+        } else if (data.glassdoor_url) {
+            // Show direct link to company page if we found it (even if rating extraction failed)
+            ratingContainer.innerHTML = `
+                <span>Glassdoor:</span>
+                <a href="${data.glassdoor_url}" target="_blank" rel="noopener">
+                    View reviews →
+                </a>
+            `;
         } else {
-            // Show manual search link if automatic fetch failed
+            // Show search link as last resort
             showGlassdoorSearchLink(companyName, ratingContainer);
         }
     } catch (error) {

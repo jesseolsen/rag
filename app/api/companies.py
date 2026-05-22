@@ -105,7 +105,8 @@ async def get_glassdoor_rating(company_name: str):
         if not company_url:
             return {
                 "found": False,
-                "error": "Company not found in search results"
+                "error": "Company not found in search results",
+                "search_url": search_url  # Return search URL as fallback
             }
 
         # Ensure full URL
@@ -216,10 +217,13 @@ async def get_glassdoor_rating(company_name: str):
                 "company_name": company_name
             }
         else:
+            # Even if we can't extract rating, return the company URL
+            # so frontend can link directly to the page
             return {
                 "found": False,
                 "error": "Could not extract rating from page",
-                "glassdoor_url": company_url
+                "glassdoor_url": company_url,
+                "company_name": company_name
             }
 
     except requests.Timeout:
