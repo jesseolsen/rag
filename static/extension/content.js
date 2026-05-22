@@ -427,6 +427,36 @@ async function fillForm(resumeData, resumeOrder, backendUrl) {
             return;
         }
 
+        // DATE INPUTS (type="date")
+        if (type === 'date') {
+            // HTML5 date inputs require YYYY-MM-DD format
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            const dateValue = `${yyyy}-${mm}-${dd}`;
+
+            try {
+                field.value = dateValue;
+                field.dispatchEvent(new Event('input', { bubbles: true }));
+                field.dispatchEvent(new Event('change', { bubbles: true }));
+                field.dispatchEvent(new Event('blur', { bubbles: true }));
+
+                const oldBg = field.style.backgroundColor;
+                field.style.backgroundColor = '#ffffcc';
+                setTimeout(() => {
+                    field.style.backgroundColor = oldBg;
+                }, 1500);
+
+                filledCount++;
+                window.RESUME_RAG_FILLED_FIELDS[id || name] = dateValue;
+                console.log('[RESUME_RAG] Filled date field:', name || id, '=', dateValue);
+            } catch (e) {
+                console.log('[RESUME_RAG] Error filling date field:', e);
+            }
+            return;
+        }
+
         // TEXT INPUTS
         if (type === 'text' || type === '' || type === 'email' || type === 'tel' || field.tagName === 'TEXTAREA') {
             // Skip location field - it's handled as a dropdown in handleDropdowns()
@@ -442,7 +472,14 @@ async function fillForm(resumeData, resumeOrder, backendUrl) {
 
             let value = null;
 
-            if (/last.?name|lname|surname/i.test(context)) {
+            // Check for date fields (text inputs with date labels/placeholders)
+            if (/^date$|start.?date|end.?date|application.?date/i.test(context) || /mm\/dd\/yyyy|mm-dd-yyyy/i.test(placeholder)) {
+                const today = new Date();
+                const mm = String(today.getMonth() + 1).padStart(2, '0');
+                const dd = String(today.getDate()).padStart(2, '0');
+                const yyyy = today.getFullYear();
+                value = `${mm}/${dd}/${yyyy}`;
+            } else if (/last.?name|lname|surname/i.test(context)) {
                 value = data.last;
             } else if (/first.?name|fname/i.test(context)) {
                 value = data.first;
