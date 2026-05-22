@@ -1890,7 +1890,11 @@ function detectGlassdoorPage() {
         const urlParams = new URLSearchParams(window.location.search);
         const keyword = urlParams.get('keyword');
         if (keyword) {
-            companyName = keyword;
+            // Clean up the keyword (remove quotes, "results", etc.)
+            companyName = keyword
+                .replace(/^["']|["']$/g, '')  // Remove surrounding quotes
+                .replace(/\s+results?$/i, '') // Remove " results" suffix
+                .trim();
             console.log('[RESUME_RAG] Company from search keyword:', companyName);
         }
     }
@@ -1920,8 +1924,9 @@ function detectGlassdoorPage() {
         }
     }
 
-    if (!companyName) {
-        console.log('[RESUME_RAG] Could not extract company name from Glassdoor page');
+    // Don't track Glassdoor itself as a company
+    if (!companyName || companyName.toLowerCase() === 'glassdoor') {
+        console.log('[RESUME_RAG] Skipping Glassdoor page (not a company to track)');
         return null;
     }
 
