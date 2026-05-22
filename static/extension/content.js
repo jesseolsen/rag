@@ -212,7 +212,24 @@ function extractCompanyName() {
         }
     }
 
-    // 3. Page title - extract company name from patterns like "Company Name - Job Title"
+    // 3. Look for company name in main page heading (h1, h2)
+    const headings = document.querySelectorAll('h1, h2');
+    for (const heading of headings) {
+        const text = heading.textContent?.trim();
+        if (text && text.length > 2 && text.length < 100) {
+            // Skip if it contains job-related words or is too generic
+            if (!/job|career|application|apply|hiring|position|welcome|openings/i.test(text)) {
+                // Clean up the text (remove extra commas, spaces, etc.)
+                const cleaned = text.replace(/,\s*$/, '').trim();
+                if (cleaned && !/^(the|a|an)\s/i.test(cleaned)) {
+                    console.log('[RESUME_RAG] Company from heading:', cleaned);
+                    return cleaned;
+                }
+            }
+        }
+    }
+
+    // 4. Page title - extract company name from patterns like "Company Name - Job Title"
     const title = document.title;
     if (title) {
         // Try splitting on common separators
@@ -232,7 +249,7 @@ function extractCompanyName() {
         }
     }
 
-    // 4. Look for company name in form fields or labels
+    // 5. Look for company name in form fields or labels
     const companyInputs = document.querySelectorAll('input[name*="company"], input[id*="company"]');
     for (const input of companyInputs) {
         if (input.value && input.value.length > 2) {
@@ -240,7 +257,7 @@ function extractCompanyName() {
         }
     }
 
-    // 5. Check hostname as fallback
+    // 6. Check hostname as fallback
     const hostname = window.location.hostname;
     const domain = hostname.replace(/^(www\.|jobs\.|careers\.)/, '');
     const companyFromDomain = domain.split('.')[0];
