@@ -1032,16 +1032,38 @@ async function handleFileInputs(resumeOrder, backendUrl) {
     fileInputs.forEach(input => {
         if (!input.offsetHeight) return; // Skip hidden
 
-        // Get label context
+        // Get label context - try multiple methods
         let label = '';
         try {
+            // Method 1: label[for="id"]
             if (input.id) {
                 const lbl = document.querySelector(`label[for="${input.id}"]`);
                 if (lbl) label = lbl.textContent?.toLowerCase() || '';
             }
+
+            // Method 2: input is inside a label
+            if (!label) {
+                const parentLabel = input.closest('label');
+                if (parentLabel) label = parentLabel.textContent?.toLowerCase() || '';
+            }
+
+            // Method 3: look for label in parent container
+            if (!label) {
+                const container = input.closest('div, fieldset, section');
+                if (container) {
+                    const nearbyLabel = container.querySelector('label');
+                    if (nearbyLabel) label = nearbyLabel.textContent?.toLowerCase() || '';
+                }
+            }
+
+            // Method 4: check aria-label or title
+            if (!label) {
+                label = (input.getAttribute('aria-label') || input.getAttribute('title') || '').toLowerCase();
+            }
         } catch (e) {}
 
         const context = `${input.id?.toLowerCase() || ''}|${input.name?.toLowerCase() || ''}|${label}`;
+        console.log('[RESUME_RAG] File input context:', context);
 
         // Match Resume/CV field
         if (/resume|cv|curriculum/.test(context) && resumeFile) {
