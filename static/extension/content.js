@@ -195,9 +195,21 @@ function extractCompanyName() {
     // 1. Check URL path for company name (e.g., careers-page.com/COMPANY/job/...)
     const url = window.location.href;
     const pathname = window.location.pathname;
+    const hostname = window.location.hostname;
 
-    // Pattern: /company-name/job or /company-name/apply or similar (handles plural forms)
-    const pathMatch = pathname.match(/^\/([^\/]+)\/(jobs?|apply|careers|positions?)/i);
+    // Pattern 1: /company-name/job or /company-name/apply (standard)
+    let pathMatch = pathname.match(/^\/([^\/]+)\/(jobs?|apply|careers|positions?)/i);
+
+    // Pattern 2: Lever jobs - jobs.lever.co/company-name/job-id/apply
+    if (!pathMatch && hostname.includes('lever.co')) {
+        pathMatch = pathname.match(/^\/([^\/]+)\//);
+    }
+
+    // Pattern 3: Generic /company-name/... on job boards
+    if (!pathMatch && (hostname.includes('jobs.') || hostname.includes('careers.'))) {
+        pathMatch = pathname.match(/^\/([^\/]+)\//);
+    }
+
     console.log('[RESUME_RAG] Path match result:', pathMatch);
     if (pathMatch && pathMatch[1]) {
         const companySlug = pathMatch[1];
@@ -206,7 +218,7 @@ function extractCompanyName() {
             .split(/[-_]/)
             .map(word => word.charAt(0).toUpperCase() + word.slice(1))
             .join(' ');
-        if (companyName.length > 2 && !/www|com|org|net|io/i.test(companyName)) {
+        if (companyName.length > 2 && !/www|com|org|net|io|job|apply|search/i.test(companyName)) {
             console.log('[RESUME_RAG] Company from URL path:', companyName);
             return companyName;
         }
