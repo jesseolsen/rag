@@ -117,14 +117,15 @@ async def get_tracking_status():
 
 
 @router.get("/check-company")
-async def check_company_exists(company_name: str):
+async def check_company_exists(company_name: str, auto_add: bool = False):
     """Check if a company already exists in the tracking spreadsheet.
 
     Args:
         company_name: Name of the company to check
+        auto_add: If True and company doesn't exist, add it to the spreadsheet
 
     Returns:
-        Dict with exists (bool) and enabled (bool) flags
+        Dict with exists (bool), cached Glassdoor data if available, and enabled flag
     """
     # Check if Google Sheets integration is enabled
     spreadsheet_url = settings.google_spreadsheet
@@ -144,17 +145,43 @@ async def check_company_exists(company_name: str):
             "message": "Google Sheets service not available"
         }
 
-    # Check if company exists
-    exists = sheets_service.check_company_exists(
+    # Get company data (includes cached Glassdoor rating if available)
+    company_data = sheets_service.get_company_data(
         spreadsheet_url=spreadsheet_url,
         company_name=company_name
     )
 
-    return {
-        "enabled": True,
-        "exists": exists,
-        "company_name": company_name
-    }
+    if company_data:
+        # Company exists, return cached data
+        return {
+            "enabled": True,
+            "exists": True,
+            "company_name": company_name,
+            "cached_rating": company_data.get('rating'),
+            "cached_review_count": company_data.get('review_count')
+        }
+    elif auto_add:
+        # Company doesn't exist, add it to spreadsheet
+        success = sheets_service.add_job_application(
+            spreadsheet_url=spreadsheet_url,
+            company_name=company_name,
+            job_url="",  # Will be filled when they actually apply
+            additional_data={}
+        )
+        return {
+            "enabled": True,
+            "exists": False,
+            "added": success,
+            "company_name": company_name
+        }
+    else:
+        # Company doesn't exist and not auto-adding
+        return {
+            "enabled": True,
+            "exists": False,
+            "company_name": company_name
+        }
+
 
 
 class GlassdoorUpdateRequest(BaseModel):

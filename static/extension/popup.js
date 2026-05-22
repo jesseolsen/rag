@@ -127,11 +127,11 @@ async function loadCompanyName() {
             // Set badge to checking while we verify status
             updateExtensionBadge('checking');
 
-            // Check if company exists in spreadsheet and load Glassdoor rating in parallel
-            await Promise.all([
-                checkCompanyStatus(response.companyName, statusIndicator),
-                loadGlassdoorRating(response.companyName)
-            ]);
+            // Check company status first (returns cached rating if available)
+            const statusData = await checkCompanyStatus(response.companyName, statusIndicator);
+
+            // Load Glassdoor rating (will use cached if available, otherwise fetch)
+            await loadGlassdoorRating(response.companyName, statusData);
         } else {
             console.log('[POPUP] No company name detected');
             updateExtensionBadge(null);
@@ -144,13 +144,14 @@ async function loadCompanyName() {
 
 async function checkCompanyStatus(companyName, statusIndicator) {
     try {
-        const response = await fetch(`${backendUrl}/api/v1/tracking/check-company?company_name=${encodeURIComponent(companyName)}`);
+        // Auto-add company to spreadsheet if it doesn't exist
+        const response = await fetch(`${backendUrl}/api/v1/tracking/check-company?company_name=${encodeURIComponent(companyName)}&auto_add=true`);
 
         if (!response.ok) {
             console.log('[POPUP] Failed to check company status');
             statusIndicator.style.display = 'none';
             updateExtensionBadge(null);
-            return;
+            return { cachedRating: null, cachedReviewCount: null };
         }
 
         const data = await response.json();
@@ -160,7 +161,7 @@ async function checkCompanyStatus(companyName, statusIndicator) {
             // Google Sheets not configured, hide indicator
             statusIndicator.style.display = 'none';
             updateExtensionBadge(null);
-            return;
+            return { cachedRating: null, cachedReviewCount: null };
         }
 
         // Update indicator based on whether company exists
@@ -168,18 +169,25 @@ async function checkCompanyStatus(companyName, statusIndicator) {
 
         if (data.exists) {
             statusIndicator.classList.add('applied');
-            statusIndicator.title = 'Already applied';
+            statusIndicator.title = 'Already applied or tracked';
             updateExtensionBadge('applied');
         } else {
             statusIndicator.classList.add('new');
-            statusIndicator.title = 'Not yet applied';
+            statusIndicator.title = 'Just added to tracking';
             updateExtensionBadge('new');
         }
+
+        // Return cached Glassdoor data if available
+        return {
+            cachedRating: data.cached_rating,
+            cachedReviewCount: data.cached_review_count
+        };
     } catch (error) {
         console.log('[POPUP] Error checking company status:', error);
         // Hide indicator on error
         statusIndicator.style.display = 'none';
         updateExtensionBadge(null);
+        return { cachedRating: null, cachedReviewCount: null };
     }
 }
 
@@ -211,9 +219,25 @@ function updateExtensionBadge(status) {
     }
 }
 
-async function loadGlassdoorRating(companyName) {
+async function loadGlassdoorRating(companyName, statusData) {
     const ratingContainer = document.getElementById('glassdoorRating');
 
+    // Check if we have cached rating from spreadsheet
+    if (statusData && statusData.cachedRating) {
+        const reviewText = statusData.cachedReviewCount ? ` (${statusData.cachedReviewCount} reviews)` : '';
+        ratingContainer.style.display = 'flex';
+        ratingContainer.innerHTML = `
+            <span>Glassdoor:</span>
+            <span style="color: #0caa41; font-weight: 600;">
+                <span class="rating-star">★</span> ${statusData.cachedRating.toFixed(1)}${reviewText}
+            </span>
+            <span style="font-size: 11px; color: #999; margin-left: 4px;">(cached)</span>
+        `;
+        console.log('[POPUP] Showing cached Glassdoor rating:', statusData.cachedRating);
+        return;
+    }
+
+    // No cached rating, try to fetch from Glassdoor
     try {
         ratingContainer.style.display = 'flex';
         ratingContainer.innerHTML = '<span class="rating-loading">Loading Glassdoor rating...</span>';

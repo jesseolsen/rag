@@ -97,6 +97,106 @@ class GoogleSheetsService:
 
         return None
 
+    def get_company_data(
+        self,
+        spreadsheet_url: str,
+        company_name: str
+    ) -> Optional[dict]:
+        """Get company data from spreadsheet including Glassdoor rating.
+
+        Args:
+            spreadsheet_url: The Google Sheets URL
+            company_name: Name of the company to search for
+
+        Returns:
+            Dict with company data (rating, review_count) or None if not found
+        """
+        if not self.service:
+            print("[GOOGLE_SHEETS] Service not initialized. Check credentials file.")
+            return None
+
+        spreadsheet_id = self.extract_spreadsheet_id(spreadsheet_url)
+        if not spreadsheet_id:
+            print(f"[GOOGLE_SHEETS] Could not extract spreadsheet ID from URL: {spreadsheet_url}")
+            return None
+
+        # Get sheet name from gid or use first sheet
+        gid = self.extract_gid(spreadsheet_url)
+        sheet_name = self.get_sheet_name_from_gid(spreadsheet_id, gid) if gid else None
+
+        if not sheet_name:
+            # Default to first sheet
+            try:
+                spreadsheet = self.service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+                sheets = spreadsheet.get('sheets', [])
+                if sheets:
+                    sheet_name = sheets[0]['properties']['title']
+                else:
+                    print("[GOOGLE_SHEETS] No sheets found in spreadsheet")
+                    return None
+            except HttpError as e:
+                print(f"[GOOGLE_SHEETS] Error getting spreadsheet info: {e}")
+                return None
+
+        try:
+            # Read all values from columns A-G
+            result = self.service.spreadsheets().values().get(
+                spreadsheetId=spreadsheet_id,
+                range=f'{sheet_name}!A:G'
+            ).execute()
+
+            values = result.get('values', [])
+
+            # Search for company name in the first column
+            company_name_lower = company_name.lower().strip()
+
+            for row in values:
+                if not row:
+                    continue
+
+                cell_value = row[0] if len(row) > 0 else ''
+
+                # Extract text from HYPERLINK formula if present
+                company_text = None
+                if isinstance(cell_value, str):
+                    if cell_value.startswith('=HYPERLINK'):
+                        match = re.search(r'"([^"]*)"[^"]*$', cell_value)
+                        if match:
+                            company_text = match.group(1)
+                    else:
+                        company_text = cell_value
+
+                    if company_text and company_text.lower().strip() == company_name_lower:
+                        # Found the company! Extract Glassdoor data if present
+                        rating = None
+                        review_count = None
+
+                        # Column F (index 5) = Glassdoor Rating
+                        if len(row) > 5 and row[5]:
+                            try:
+                                rating = float(row[5])
+                            except (ValueError, TypeError):
+                                pass
+
+                        # Column G (index 6) = Review Count
+                        if len(row) > 6 and row[6]:
+                            try:
+                                review_count = int(row[6])
+                            except (ValueError, TypeError):
+                                pass
+
+                        return {
+                            'exists': True,
+                            'rating': rating,
+                            'review_count': review_count
+                        }
+
+            return None
+
+        except HttpError as e:
+            print(f"[GOOGLE_SHEETS] Error reading spreadsheet: {e}")
+            return None
+
     def check_company_exists(
         self,
         spreadsheet_url: str,
