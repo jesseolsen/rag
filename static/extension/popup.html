@@ -320,6 +320,21 @@
         .field-answer-item:hover {
             background: #f9f9f9;
         }
+        .field-answer-item.newly-added {
+            background: #c8e6c9;
+            animation: fadeToWhite 3s ease-in-out forwards;
+        }
+        @keyframes fadeToWhite {
+            0% {
+                background: #c8e6c9;
+            }
+            70% {
+                background: #c8e6c9;
+            }
+            100% {
+                background: white;
+            }
+        }
         .field-answer-question {
             font-weight: 600;
             color: #555;

@@ -440,7 +440,7 @@ async function loadFieldAnswers() {
     }
 }
 
-function renderFieldAnswers(answers) {
+function renderFieldAnswers(answers, newAnswerIds = []) {
     const list = document.getElementById('fieldAnswersList');
     const noAnswers = document.getElementById('noAnswers');
 
@@ -454,8 +454,10 @@ function renderFieldAnswers(answers) {
     list.innerHTML = answers.map((answer) => {
         const escapedQuestion = escapeHtml(answer.question_text);
         const escapedAnswer = escapeHtml(answer.answer_text);
+        const isNew = newAnswerIds.includes(answer.id);
+        const newClass = isNew ? 'newly-added' : '';
         return `
-        <li class="field-answer-item" data-answer-id="${answer.id}" data-editing="false">
+        <li class="field-answer-item ${newClass}" data-answer-id="${answer.id}" data-editing="false">
             <div class="field-answer-question" title="${escapedQuestion}">
                 ${escapedQuestion}
             </div>
@@ -661,6 +663,11 @@ async function captureAnswers() {
         status.className = 'status info';
         captureButton.disabled = true;
 
+        // Get current answer IDs before capture
+        const beforeResponse = await fetch(`${backendUrl}/api/v1/field-answers/`);
+        const beforeData = await beforeResponse.json();
+        const beforeIds = new Set((beforeData.answers || []).map(a => a.id));
+
         // Get the active tab to find the form page
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
@@ -683,8 +690,20 @@ async function captureAnswers() {
                 status.textContent = response.message;
                 status.className = 'status success';
 
-                // Reload the saved answers list
-                await loadFieldAnswers();
+                // Get answer IDs after capture to find new ones
+                const afterResponse = await fetch(`${backendUrl}/api/v1/field-answers/`);
+                const afterData = await afterResponse.json();
+                const allAnswers = afterData.answers || [];
+
+                // Find newly added answers
+                const newAnswerIds = allAnswers
+                    .filter(a => !beforeIds.has(a.id))
+                    .map(a => a.id);
+
+                console.log('[POPUP] New answer IDs:', newAnswerIds);
+
+                // Reload the saved answers list with highlighting
+                renderFieldAnswers(allAnswers, newAnswerIds);
 
                 // Switch to answers tab to show what was captured
                 const answersTab = document.querySelector('[data-tab="answers"]');
