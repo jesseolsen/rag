@@ -115,10 +115,14 @@ async function loadCompanyName() {
 
                 console.log('[POPUP] Company name displayed:', response.companyName);
 
+                // Set badge to checking while we verify status
+                updateExtensionBadge('checking');
+
                 // Check if company exists in spreadsheet
                 await checkCompanyStatus(response.companyName, statusIndicator);
             } else {
                 console.log('[POPUP] No company name detected');
+                updateExtensionBadge(null);
             }
         });
     } catch (error) {
@@ -133,6 +137,7 @@ async function checkCompanyStatus(companyName, statusIndicator) {
         if (!response.ok) {
             console.log('[POPUP] Failed to check company status');
             statusIndicator.style.display = 'none';
+            updateExtensionBadge(null);
             return;
         }
 
@@ -142,6 +147,7 @@ async function checkCompanyStatus(companyName, statusIndicator) {
         if (!data.enabled) {
             // Google Sheets not configured, hide indicator
             statusIndicator.style.display = 'none';
+            updateExtensionBadge(null);
             return;
         }
 
@@ -151,14 +157,45 @@ async function checkCompanyStatus(companyName, statusIndicator) {
         if (data.exists) {
             statusIndicator.classList.add('applied');
             statusIndicator.title = 'Already applied';
+            updateExtensionBadge('applied');
         } else {
             statusIndicator.classList.add('new');
             statusIndicator.title = 'Not yet applied';
+            updateExtensionBadge('new');
         }
     } catch (error) {
         console.log('[POPUP] Error checking company status:', error);
         // Hide indicator on error
         statusIndicator.style.display = 'none';
+        updateExtensionBadge(null);
+    }
+}
+
+function updateExtensionBadge(status) {
+    try {
+        if (!status) {
+            // Clear badge
+            chrome.action.setBadgeText({ text: '' });
+            return;
+        }
+
+        // Set badge with colored circle
+        chrome.action.setBadgeText({ text: '●' });
+
+        if (status === 'new') {
+            // Green for not yet applied
+            chrome.action.setBadgeBackgroundColor({ color: '#4caf50' });
+        } else if (status === 'applied') {
+            // Red for already applied
+            chrome.action.setBadgeBackgroundColor({ color: '#f44336' });
+        } else if (status === 'checking') {
+            // Gray for checking
+            chrome.action.setBadgeBackgroundColor({ color: '#9e9e9e' });
+        }
+
+        console.log('[POPUP] Extension badge updated:', status);
+    } catch (error) {
+        console.log('[POPUP] Error updating badge:', error);
     }
 }
 
