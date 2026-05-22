@@ -91,6 +91,9 @@ async function checkServerConnection() {
 }
 
 async function loadCompanyName() {
+    // Clear badge at the start - will be set again if company is detected
+    updateExtensionBadge(null);
+
     try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         console.log('[POPUP] Requesting company name from tab:', tab.id);
@@ -100,6 +103,7 @@ async function loadCompanyName() {
         }, { frameId: 0 }, async (response) => {
             if (chrome.runtime.lastError) {
                 console.log('[POPUP] Could not get company name:', chrome.runtime.lastError.message);
+                updateExtensionBadge(null);
                 return;
             }
 
@@ -127,6 +131,7 @@ async function loadCompanyName() {
         });
     } catch (error) {
         console.log('[POPUP] Error loading company name:', error);
+        updateExtensionBadge(null);
     }
 }
 
