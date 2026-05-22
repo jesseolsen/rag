@@ -166,9 +166,9 @@ async def search_field_answers(
     result = await db.execute(select(FormFieldAnswer))
     all_answers = result.scalars().all()
 
-    # Determine minimum matches based on query length (adaptive)
-    query_keyword_count = len(query_keywords.split()) if query_keywords else 0
-    min_matches = 1 if query_keyword_count <= 2 else 2
+    # Always require only 1 match for more lenient matching
+    # This allows "location" to match "where is your working location"
+    min_matches = 1
 
     # Score each answer
     scored_answers = []

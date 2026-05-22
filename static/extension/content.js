@@ -176,69 +176,39 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 });
 
-// Hook into form submissions to capture final values
+// Auto-capture answers on form submission
 document.addEventListener('submit', async (e) => {
-    const form = e.target;
-    console.log('[RESUME_RAG] Form submission detected:', form);
+    console.log('[RESUME_RAG] Form submission detected - auto-capturing answers');
+    const backendUrl = window.RESUME_RAG_BACKEND_URL || 'http://localhost:8000';
 
-    // Capture form values and send to backend
-    const formData = captureFormData();
-    if (formData && Object.keys(formData).length > 0) {
-        console.log('[RESUME_RAG] Capturing form data on submit:', formData);
-        try {
-            const backendUrl = window.RESUME_RAG_BACKEND_URL || 'http://localhost:8000';
-
-            // Save form response
-            await apiRequest(`${backendUrl}/api/v1/form-response`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    url: window.location.href,
-                    timestamp: new Date().toISOString(),
-                    data: formData
-                })
-            });
-
-            // Also save individual field answers for future reuse
-            await captureAndSaveFieldAnswers(formData, backendUrl);
-
-            console.log('[RESUME_RAG] ✓ Form data and field answers saved to backend');
-        } catch (err) {
-            console.log('[RESUME_RAG] Could not save form data:', err.message);
-        }
+    try {
+        const result = await captureAnswersFromCurrentForm(backendUrl, window.RESUME_RAG_FILLED_FIELDS);
+        console.log('[RESUME_RAG] ✓ Auto-captured on submit:', result.capturedCount, 'answers');
+    } catch (err) {
+        console.log('[RESUME_RAG] Error auto-capturing on submit:', err.message);
     }
 }, true);
 
-async function captureAndSaveFieldAnswers(formData, backendUrl) {
-    // Extract question fields (often contain : or ? in the data or have question patterns)
-    const textareas = document.querySelectorAll('textarea');
+// Auto-capture on Continue/Next/Save button clicks
+document.addEventListener('click', async (e) => {
+    const button = e.target.closest('button, input[type="submit"], input[type="button"], a[role="button"]');
+    if (!button) return;
 
-    for (const textarea of textareas) {
-        // Get the question label from the form element
-        const label = textarea.closest('label') || textarea.parentElement;
-        const questionText = label?.textContent || textarea.placeholder || '';
+    const buttonText = (button.textContent || button.value || button.getAttribute('aria-label') || '').toLowerCase();
 
-        if (questionText && formData[textarea.id]) {
-            // Only save if it's not empty and looks like a question
-            if ((questionText.includes('?') || questionText.includes(':')) && formData[textarea.id].trim()) {
-                try {
-                    await apiRequest(`${backendUrl}/api/v1/field-answers/`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            question_text: questionText.trim(),
-                            answer_text: formData[textarea.id],
-                            field_type: 'textarea'
-                        })
-                    });
-                    console.log('[RESUME_RAG] Saved field answer for question:', questionText.substring(0, 50));
-                } catch (err) {
-                    console.log('[RESUME_RAG] Could not save field answer:', err.message);
-                }
-            }
+    // Check if this is a submit/continue/next/save button
+    if (/submit|continue|next|save|proceed|apply|send/i.test(buttonText)) {
+        console.log('[RESUME_RAG] Navigation button clicked:', buttonText, '- auto-capturing answers');
+        const backendUrl = window.RESUME_RAG_BACKEND_URL || 'http://localhost:8000';
+
+        try {
+            const result = await captureAnswersFromCurrentForm(backendUrl, window.RESUME_RAG_FILLED_FIELDS);
+            console.log('[RESUME_RAG] ✓ Auto-captured on button click:', result.capturedCount, 'answers');
+        } catch (err) {
+            console.log('[RESUME_RAG] Error auto-capturing on click:', err.message);
         }
     }
-}
+}, true);
 
 async function fillForm(resumeData, resumeOrder, backendUrl) {
     console.log('[RESUME_RAG] Starting form fill');
@@ -247,6 +217,8 @@ async function fillForm(resumeData, resumeOrder, backendUrl) {
     // Store resume order and backend URL globally for Attach button handler
     window.RESUME_RAG_RESUME_ORDER = resumeOrder || [];
     window.RESUME_RAG_BACKEND_URL_STORED = backendUrl || 'http://localhost:8000';
+    // Store full resume data globally for field inference (e.g., country from state)
+    window.RESUME_RAG_RESUME_DATA = resumeData;
 
     const data = {
         first: resumeData.first_name || '',
@@ -729,20 +701,8 @@ async function handleDropdowns(data, backendUrl) {
         let valueToFill = null;
         let valueSource = null;
 
-        // First, try to match with resume data (city, country, etc.)
-        if (questionText) {
-            const lowerQuestion = questionText.toLowerCase();
-
-            // Check for city/location fields
-            if (/location|city|where.*live|where.*located/i.test(lowerQuestion) && data.city) {
-                valueToFill = data.city;
-                valueSource = 'resume';
-                console.log('[RESUME_RAG] Matched resume city:', valueToFill);
-            }
-        }
-
-        // If no resume match, search saved answers
-        if (!valueToFill && questionText && questionText.length > 5) {
+        // First, search saved answers (user's specific answers take priority)
+        if (questionText && questionText.length > 5) {
             try {
                 console.log('[RESUME_RAG] Searching saved answers for:', questionText);
                 const searchResponse = await apiRequest(
@@ -760,7 +720,7 @@ async function handleDropdowns(data, backendUrl) {
                         valueSource = 'saved';
                         console.log('[RESUME_RAG] Found saved answer:', valueToFill, '(score: ' + bestMatch.score + ')');
                     } else {
-                        console.log('[RESUME_RAG] No matches found for:', questionText.substring(0, 30));
+                        console.log('[RESUME_RAG] No saved matches, checking resume data');
                     }
                 } else {
                     console.log('[RESUME_RAG] Search request failed:', searchResponse.status);
@@ -768,8 +728,33 @@ async function handleDropdowns(data, backendUrl) {
             } catch (err) {
                 console.log('[RESUME_RAG] Error searching for answer:', err.message);
             }
-        } else if (!valueToFill) {
-            console.log('[RESUME_RAG] Skipping - no resume match and question text too short');
+        }
+
+        // If no saved answer found, try resume data as fallback
+        if (!valueToFill && questionText) {
+            const lowerQuestion = questionText.toLowerCase();
+
+            // Check for city/location fields
+            if (/location|city|where.*live|where.*located|where.*work/i.test(lowerQuestion) && data.city) {
+                valueToFill = data.city;
+                valueSource = 'resume';
+                console.log('[RESUME_RAG] Using resume city as fallback:', valueToFill);
+            }
+            // Check for country fields - infer from state if US
+            else if (/country|nation/i.test(lowerQuestion)) {
+                // If resume has US state (2-letter code), infer United States
+                // Get state from window.RESUME_RAG_RESUME_DATA if available
+                const state = window.RESUME_RAG_RESUME_DATA?.state;
+                if (state && /^[A-Z]{2}$/.test(state)) {
+                    valueToFill = 'United States';
+                    valueSource = 'inferred';
+                    console.log('[RESUME_RAG] Inferred country from state:', state, '→ United States');
+                }
+            }
+        }
+
+        if (!valueToFill && questionText && questionText.length <= 5) {
+            console.log('[RESUME_RAG] Skipping - question text too short');
         }
 
         // Add to config if we found a value
@@ -883,43 +868,6 @@ async function handleDropdowns(data, backendUrl) {
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function captureFormData() {
-    const data = {};
-
-    // Capture all text inputs
-    document.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"], textarea').forEach(field => {
-        if (field.id && field.value) {
-            data[field.id] = field.value;
-        }
-    });
-
-    // Capture all selects and comboboxes
-    document.querySelectorAll('input[role="combobox"], select').forEach(field => {
-        if (field.id) {
-            const value = field.value || '';
-            if (value) {
-                data[field.id] = value;
-            } else {
-                // For React Select, try to read the visible value
-                const container = field.closest('[class*="select"]');
-                const valueSpan = container?.querySelector('.select__single-value');
-                if (valueSpan && valueSpan.textContent?.trim()) {
-                    data[field.id] = valueSpan.textContent.trim();
-                }
-            }
-        }
-    });
-
-    // Capture checked checkboxes
-    document.querySelectorAll('input[type="checkbox"]:checked').forEach(field => {
-        if (field.id) {
-            data[field.id] = true;
-        }
-    });
-
-    return data;
 }
 
 async function handleFileInputs(resumeOrder, backendUrl) {
