@@ -226,8 +226,10 @@ function extractCompanyName() {
     for (const heading of headings) {
         const text = heading.textContent?.trim();
         if (text && text.length > 2 && text.length < 100) {
-            // Skip if it contains job-related words or is too generic
-            if (!/job|career|application|apply|hiring|position|welcome|openings/i.test(text)) {
+            // Skip if it contains job-related words, job titles, or is too generic
+            const jobTitlePattern = /job|career|application|apply|hiring|position|welcome|openings|engineer|developer|designer|manager|analyst|specialist|coordinator|director|lead|senior|junior|intern|consultant|architect|scientist|technician|administrator|assistant|associate|officer|representative|agent|executive/i;
+
+            if (!jobTitlePattern.test(text)) {
                 // Clean up the text (remove extra commas, spaces, etc.)
                 const cleaned = text.replace(/,\s*$/, '').trim();
                 if (cleaned && !/^(the|a|an)\s/i.test(cleaned)) {
@@ -244,15 +246,19 @@ function extractCompanyName() {
         // Try splitting on common separators
         const parts = title.split(/[\|\-–—]/);
         if (parts.length > 1) {
+            const jobTitlePattern = /job|career|application|apply|hiring|position|engineer|developer|designer|manager|analyst|specialist/i;
+
             // Usually company name is at the end or beginning
             const lastPart = parts[parts.length - 1].trim();
             const firstPart = parts[0].trim();
 
-            // Prefer the part that doesn't contain common job-related words
-            if (!/job|career|application|apply|hiring|position/i.test(lastPart) && lastPart.length < 50) {
+            // Prefer the part that doesn't contain common job-related words or job titles
+            if (!jobTitlePattern.test(lastPart) && lastPart.length > 2 && lastPart.length < 50) {
+                console.log('[RESUME_RAG] Company from page title (last):', lastPart);
                 return lastPart;
             }
-            if (!/job|career|application|apply|hiring|position/i.test(firstPart) && firstPart.length < 50) {
+            if (!jobTitlePattern.test(firstPart) && firstPart.length > 2 && firstPart.length < 50) {
+                console.log('[RESUME_RAG] Company from page title (first):', firstPart);
                 return firstPart;
             }
         }
