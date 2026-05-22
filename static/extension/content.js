@@ -8,6 +8,7 @@ window.RESUME_RAG_RESUME_ORDER = [];
 window.RESUME_RAG_RESUME_DATA = {};
 window.RESUME_RAG_BACKEND_URL_STORED = 'http://localhost:8000';
 window.RESUME_RAG_FILLED_FIELDS = {}; // Track which fields were filled by extension
+window.RESUME_RAG_EXTENSION_ACTIVE = false; // Only true when user explicitly uses extension on this page
 
 // Helper function to make API requests through background script (avoids CORS issues with localhost)
 async function apiRequest(url, options = {}) {
@@ -166,6 +167,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     if (request.action === 'captureAnswers') {
         console.log('[RESUME_RAG] Capture answers requested');
+        // Mark extension as active when user manually captures answers
+        window.RESUME_RAG_EXTENSION_ACTIVE = true;
+
         captureAnswersFromCurrentForm(request.backendUrl, window.RESUME_RAG_FILLED_FIELDS).then((result) => {
             sendResponse(result);
         }).catch((error) => {
@@ -255,6 +259,12 @@ async function trackJobApplication(backendUrl) {
 
 // Auto-capture answers on form submission
 document.addEventListener('submit', async (e) => {
+    // Only auto-capture if user has explicitly used the extension on this page
+    if (!window.RESUME_RAG_EXTENSION_ACTIVE) {
+        console.log('[RESUME_RAG] Form submission detected but extension not active - skipping auto-capture');
+        return;
+    }
+
     console.log('[RESUME_RAG] Form submission detected - auto-capturing answers');
     const backendUrl = window.RESUME_RAG_BACKEND_URL || 'http://localhost:8000';
 
@@ -278,6 +288,12 @@ document.addEventListener('click', async (e) => {
 
     // Check if this is a submit/continue/next/save button
     if (/submit|continue|next|save|proceed|apply|send/i.test(buttonText)) {
+        // Only auto-capture if user has explicitly used the extension on this page
+        if (!window.RESUME_RAG_EXTENSION_ACTIVE) {
+            console.log('[RESUME_RAG] Navigation button clicked but extension not active - skipping auto-capture');
+            return;
+        }
+
         console.log('[RESUME_RAG] Navigation button clicked:', buttonText, '- auto-capturing answers');
         const backendUrl = window.RESUME_RAG_BACKEND_URL || 'http://localhost:8000';
 
@@ -298,6 +314,9 @@ document.addEventListener('click', async (e) => {
 async function fillForm(resumeData, resumeOrder, backendUrl) {
     console.log('[RESUME_RAG] Starting form fill');
     console.log('[RESUME_RAG] Resume loaded:', resumeData.filename);
+
+    // Mark extension as active on this page (enables auto-capture on submit)
+    window.RESUME_RAG_EXTENSION_ACTIVE = true;
 
     // Store resume order and backend URL globally for Attach button handler
     window.RESUME_RAG_RESUME_ORDER = resumeOrder || [];
