@@ -123,12 +123,19 @@ async function loadCompanyName() {
             companyDisplay.classList.add('visible');
 
             console.log('[POPUP] Company name displayed:', response.companyName);
+            if (response.jobId) {
+                console.log('[POPUP] Job ID detected:', response.jobId);
+            }
 
             // Set badge to checking while we verify status
             updateExtensionBadge('checking');
 
-            // Check company status first (returns cached rating if available)
-            const statusData = await checkCompanyStatus(response.companyName, statusIndicator);
+            // Check company/job status (returns cached rating and duplicate status)
+            const statusData = await checkCompanyStatus(
+                response.companyName,
+                response.jobId,
+                statusIndicator
+            );
 
             // Load Glassdoor rating (will use cached if available, otherwise fetch)
             await loadGlassdoorRating(response.companyName, statusData);
@@ -142,38 +149,101 @@ async function loadCompanyName() {
     }
 }
 
-async function checkCompanyStatus(companyName, statusIndicator) {
+async function checkCompanyStatus(companyName, jobId, statusIndicator) {
     try {
-        // Auto-add company to spreadsheet if it doesn't exist
-        const response = await fetch(`${backendUrl}/api/v1/tracking/check-company?company_name=${encodeURIComponent(companyName)}&auto_add=true`);
+        // Auto-add job to spreadsheet if it doesn't exist
+        let url = `${backendUrl}/api/v1/tracking/check-company?company_name=${encodeURIComponent(companyName)}&auto_add=true`;
+        if (jobId) {
+            url += `&job_id=${encodeURIComponent(jobId)}`;
+        }
+
+        const response = await fetch(url);
 
         if (!response.ok) {
-            console.log('[POPUP] Failed to check company status');
+            console.log('[POPUP] Failed to check company status:', response.status);
             statusIndicator.style.display = 'none';
             updateExtensionBadge(null);
+
+            // Show helpful error message
+            const serverError = document.getElementById('serverError');
+            let errorHtml = '<h3>⚠️ Company Check Failed</h3>';
+
+            if (response.status === 400) {
+                try {
+                    const errorData = await response.json();
+                    errorHtml += `<p><strong>Bad Request:</strong> ${errorData.detail || 'Invalid request parameters'}</p>`;
+                    errorHtml += '<p><strong>Fix:</strong></p><ul style="margin: 4px 0; padding-left: 20px; font-size: 12px;">';
+                    errorHtml += '<li>Check that Google Sheets URL is set in backend .env</li>';
+                    errorHtml += '<li>Verify GOOGLE_SPREADSHEET env variable is valid</li>';
+                    errorHtml += '<li>Restart backend: <code>uvicorn app.main:app --reload</code></li>';
+                    errorHtml += '</ul>';
+                } catch (e) {
+                    errorHtml += '<p>Invalid request format</p>';
+                }
+            } else if (response.status === 500) {
+                errorHtml += '<p><strong>Server Error:</strong> Backend encountered an error</p>';
+                errorHtml += '<p><strong>Fix:</strong></p><ul style="margin: 4px 0; padding-left: 20px; font-size: 12px;">';
+                errorHtml += '<li>Check backend logs for Python errors</li>';
+                errorHtml += '<li>Verify Google Sheets credentials file exists</li>';
+                errorHtml += '<li>Ensure GOOGLE_SHEETS_CREDENTIALS_FILE path is correct</li>';
+                errorHtml += '<li>Check spreadsheet permissions (service account has access)</li>';
+                errorHtml += '</ul>';
+            } else if (response.status === 404) {
+                errorHtml += '<p><strong>Not Found:</strong> API endpoint missing</p>';
+                errorHtml += '<p><strong>Fix:</strong> Restart backend with latest code</p>';
+            }
+
+            serverError.innerHTML = errorHtml;
+            serverError.style.display = 'block';
+
             return { cachedRating: null, cachedReviewCount: null };
         }
 
         const data = await response.json();
-        console.log('[POPUP] Company status:', data);
+        console.log('[POPUP] Company/job status:', data);
 
         if (!data.enabled) {
             // Google Sheets not configured, hide indicator
             statusIndicator.style.display = 'none';
             updateExtensionBadge(null);
+
+            // Show configuration instructions
+            const serverError = document.getElementById('serverError');
+            serverError.innerHTML = `
+                <h3>⚠️ Google Sheets Not Configured</h3>
+                <p><strong>Fix:</strong></p>
+                <ol style="margin: 4px 0; padding-left: 20px; font-size: 12px; line-height: 1.6;">
+                    <li>Set GOOGLE_SPREADSHEET env variable to your spreadsheet URL</li>
+                    <li>Set GOOGLE_SHEETS_CREDENTIALS_FILE to your service account JSON path</li>
+                    <li>Restart the backend</li>
+                </ol>
+                <p style="font-size: 11px; margin-top: 6px;">Message: ${data.message || 'Integration not enabled'}</p>
+            `;
+            serverError.style.display = 'block';
+
             return { cachedRating: null, cachedReviewCount: null };
         }
 
-        // Update indicator based on whether company exists
+        // Clear any previous errors
+        const serverError = document.getElementById('serverError');
+        serverError.style.display = 'none';
+
+        // Update indicator based on duplicate job status (not just company existence)
         statusIndicator.classList.remove('checking');
 
-        if (data.exists) {
+        if (data.is_duplicate_job) {
+            // This exact job (same job ID) already exists - RED
             statusIndicator.classList.add('applied');
-            statusIndicator.title = 'Already applied or tracked';
+            statusIndicator.title = 'Already applied to this job';
             updateExtensionBadge('applied');
         } else {
+            // New job (even if company exists) - GREEN
             statusIndicator.classList.add('new');
-            statusIndicator.title = 'Just added to tracking';
+            if (data.exists && !data.added) {
+                statusIndicator.title = 'Company exists, new job opening';
+            } else {
+                statusIndicator.title = 'Just added to tracking';
+            }
             updateExtensionBadge('new');
         }
 
@@ -187,6 +257,21 @@ async function checkCompanyStatus(companyName, statusIndicator) {
         // Hide indicator on error
         statusIndicator.style.display = 'none';
         updateExtensionBadge(null);
+
+        // Show network error with fix instructions
+        const serverError = document.getElementById('serverError');
+        serverError.innerHTML = `
+            <h3>⚠️ Connection Error</h3>
+            <p><strong>Error:</strong> ${error.message}</p>
+            <p><strong>Fix:</strong></p>
+            <ul style="margin: 4px 0; padding-left: 20px; font-size: 12px;">
+                <li>Check that backend is running at ${backendUrl}</li>
+                <li>Start backend: <code>${BACKEND_START_COMMAND}</code></li>
+                <li>Check browser console (F12) for details</li>
+            </ul>
+        `;
+        serverError.style.display = 'block';
+
         return { cachedRating: null, cachedReviewCount: null };
     }
 }
@@ -525,9 +610,32 @@ async function handleResumeUpload(e) {
     } catch (error) {
         console.error('[POPUP] Upload error:', error);
         uploadStatus.style.display = 'none';
-        // Show error in the top serverError div (consolidated error display)
+
+        // Show detailed upload error with fix instructions
         const serverError = document.getElementById('serverError');
-        serverError.innerHTML = getServerErrorHtml(error);
+        let errorHtml = '<h3>⚠️ Resume Upload Failed</h3>';
+        errorHtml += `<p><strong>Error:</strong> ${error.message}</p>`;
+        errorHtml += '<p><strong>Fix:</strong></p><ul style="margin: 4px 0; padding-left: 20px; font-size: 12px;">';
+
+        if (error.message.includes('Failed to fetch')) {
+            errorHtml += '<li>Backend is not running - start it:</li>';
+            errorHtml += `<li><code>${BACKEND_START_COMMAND}</code></li>`;
+        } else if (error.message.includes('500')) {
+            errorHtml += '<li>Backend error processing file</li>';
+            errorHtml += '<li>Check file is valid PDF or TXT (not corrupted)</li>';
+            errorHtml += '<li>Check backend console for Python errors</li>';
+            errorHtml += '<li>Ensure database is initialized: <code>python init_db.py</code></li>';
+        } else if (error.message.includes('413')) {
+            errorHtml += '<li>File is too large (max size exceeded)</li>';
+            errorHtml += '<li>Try compressing the PDF or use a smaller file</li>';
+        } else {
+            errorHtml += '<li>Check file is valid PDF or TXT format</li>';
+            errorHtml += '<li>Ensure backend is running</li>';
+            errorHtml += '<li>Check browser console (F12) for details</li>';
+        }
+
+        errorHtml += '</ul>';
+        serverError.innerHTML = errorHtml;
         serverError.style.display = 'block';
     }
 
@@ -554,10 +662,46 @@ async function fillForm() {
         // Get resume data
         const response = await fetch(`${backendUrl}/api/v1/resume/${selectedResume.id}/data`);
         if (!response.ok) {
-            throw new Error(`Failed to fetch: ${response.statusText}`);
+            const serverError = document.getElementById('serverError');
+            let errorHtml = '<h3>⚠️ Failed to Load Resume</h3>';
+
+            if (response.status === 400) {
+                errorHtml += '<p><strong>Bad Request:</strong> Invalid resume ID or corrupted data</p>';
+                errorHtml += '<p><strong>Fix:</strong></p><ul style="margin: 4px 0; padding-left: 20px; font-size: 12px;">';
+                errorHtml += `<li>Resume ID: <code>${selectedResume.id}</code></li>`;
+                errorHtml += '<li>Try deleting and re-uploading the resume</li>';
+                errorHtml += '<li>Check backend logs for parsing errors</li>';
+                errorHtml += '<li>Ensure resume file is valid PDF or TXT</li>';
+                errorHtml += '</ul>';
+            } else if (response.status === 404) {
+                errorHtml += '<p><strong>Not Found:</strong> Resume not found in database</p>';
+                errorHtml += '<p><strong>Fix:</strong></p><ul style="margin: 4px 0; padding-left: 20px; font-size: 12px;">';
+                errorHtml += '<li>Delete this resume from the list (× button)</li>';
+                errorHtml += '<li>Re-upload your resume</li>';
+                errorHtml += '</ul>';
+            } else if (response.status === 500) {
+                errorHtml += '<p><strong>Server Error:</strong> Backend failed to process resume</p>';
+                errorHtml += '<p><strong>Fix:</strong></p><ul style="margin: 4px 0; padding-left: 20px; font-size: 12px;">';
+                errorHtml += '<li>Check backend console for Python errors</li>';
+                errorHtml += '<li>Ensure database is initialized: <code>python init_db.py</code></li>';
+                errorHtml += '<li>Restart backend: <code>uvicorn app.main:app --reload</code></li>';
+                errorHtml += '</ul>';
+            } else {
+                errorHtml += `<p><strong>HTTP ${response.status}:</strong> ${response.statusText}</p>`;
+                errorHtml += '<p><strong>Fix:</strong> Check backend logs and restart server</p>';
+            }
+
+            serverError.innerHTML = errorHtml;
+            serverError.style.display = 'block';
+            status.style.display = 'none';
+            return;
         }
 
         const resumeData = await response.json();
+
+        // Clear any previous errors
+        const serverError = document.getElementById('serverError');
+        serverError.style.display = 'none';
 
         // Send to content script
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -603,7 +747,23 @@ async function fillForm() {
             }
         });
     } catch (error) {
-        showStatus(`Error: ${error.message}`, 'error');
+        console.error('[POPUP] Fill form error:', error);
+
+        // Show detailed error with fix instructions
+        const serverError = document.getElementById('serverError');
+        serverError.innerHTML = `
+            <h3>⚠️ Form Fill Failed</h3>
+            <p><strong>Error:</strong> ${error.message}</p>
+            <p><strong>Fix:</strong></p>
+            <ul style="margin: 4px 0; padding-left: 20px; font-size: 12px;">
+                <li>Ensure backend is running at ${backendUrl}</li>
+                <li>Check resume data is valid (try re-uploading)</li>
+                <li>Refresh the job application page</li>
+                <li>Check browser console (F12) for details</li>
+            </ul>
+        `;
+        serverError.style.display = 'block';
+        status.style.display = 'none';
     }
 }
 

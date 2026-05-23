@@ -17,6 +17,8 @@ class JobApplicationRequest(BaseModel):
     """Request to track a job application."""
     company_name: str
     job_url: str
+    job_title: Optional[str] = None
+    job_id: Optional[str] = None
     position: Optional[str] = None
     date_applied: Optional[str] = None
     notes: Optional[str] = None
@@ -64,8 +66,6 @@ async def track_job_application(request: JobApplicationRequest):
 
     # Build additional data
     additional_data = {}
-    if request.position:
-        additional_data['position'] = request.position
     if request.date_applied:
         additional_data['date'] = request.date_applied
     else:
@@ -75,11 +75,13 @@ async def track_job_application(request: JobApplicationRequest):
     if request.notes:
         additional_data['notes'] = request.notes
 
-    # Add to spreadsheet
+    # Add to spreadsheet with job title and job ID
     success = sheets_service.add_job_application(
         spreadsheet_url=spreadsheet_url,
         company_name=request.company_name,
         job_url=request.job_url,
+        job_title=request.job_title or request.position,  # Use job_title, fallback to position
+        job_id=request.job_id,
         additional_data=additional_data
     )
 
@@ -117,15 +119,24 @@ async def get_tracking_status():
 
 
 @router.get("/check-company")
-async def check_company_exists(company_name: str, auto_add: bool = False):
-    """Check if a company already exists in the tracking spreadsheet.
+async def check_company_exists(
+    company_name: str,
+    job_id: Optional[str] = None,
+    auto_add: bool = False
+):
+    """Check if a company/job already exists in the tracking spreadsheet.
 
     Args:
         company_name: Name of the company to check
-        auto_add: If True and company doesn't exist, add it to the spreadsheet
+        job_id: Optional job ID to check for duplicate jobs
+        auto_add: If True and job doesn't exist, add it to the spreadsheet
 
     Returns:
-        Dict with exists (bool), cached Glassdoor data if available, and enabled flag
+        Dict with:
+        - exists (bool): Whether company exists
+        - is_duplicate_job (bool): Whether this specific job ID already exists
+        - cached Glassdoor data if available
+        - enabled flag
     """
     # Check if Google Sheets integration is enabled
     spreadsheet_url = settings.google_spreadsheet
@@ -133,6 +144,7 @@ async def check_company_exists(company_name: str, auto_add: bool = False):
         return {
             "enabled": False,
             "exists": False,
+            "is_duplicate_job": False,
             "message": "Google Sheets integration not configured"
         }
 
@@ -142,45 +154,86 @@ async def check_company_exists(company_name: str, auto_add: bool = False):
         return {
             "enabled": False,
             "exists": False,
+            "is_duplicate_job": False,
             "message": "Google Sheets service not available"
         }
 
-    # Get company data (includes cached Glassdoor rating if available)
-    company_data = sheets_service.get_company_data(
+    # Check if job exists (checks both company and job ID)
+    job_check = sheets_service.check_job_exists(
         spreadsheet_url=spreadsheet_url,
-        company_name=company_name
+        company_name=company_name,
+        job_id=job_id
     )
 
-    if company_data:
-        # Company exists, return cached data
+    if job_check['is_duplicate_job']:
+        # This exact job already exists (same company + job ID)
         return {
             "enabled": True,
             "exists": True,
+            "is_duplicate_job": True,
             "company_name": company_name,
-            "cached_rating": company_data.get('rating'),
-            "cached_review_count": company_data.get('review_count')
+            "job_id": job_id,
+            "cached_rating": job_check.get('cached_rating'),
+            "cached_review_count": job_check.get('cached_review_count')
         }
-    elif auto_add:
-        # Company doesn't exist, add it to spreadsheet
-        success = sheets_service.add_job_application(
-            spreadsheet_url=spreadsheet_url,
-            company_name=company_name,
-            job_url="",  # Will be filled when they actually apply
-            additional_data={}
-        )
-        return {
-            "enabled": True,
-            "exists": False,
-            "added": success,
-            "company_name": company_name
-        }
+    elif job_check['exists']:
+        # Company exists but this is a new job
+        if auto_add:
+            # Add the new job (will copy Glassdoor data from existing company row)
+            success = sheets_service.add_job_application(
+                spreadsheet_url=spreadsheet_url,
+                company_name=company_name,
+                job_url="",  # Will be filled when they actually apply
+                job_id=job_id,
+                additional_data={}
+            )
+            return {
+                "enabled": True,
+                "exists": True,
+                "is_duplicate_job": False,
+                "added": success,
+                "company_name": company_name,
+                "job_id": job_id,
+                "cached_rating": job_check.get('cached_rating'),
+                "cached_review_count": job_check.get('cached_review_count')
+            }
+        else:
+            return {
+                "enabled": True,
+                "exists": True,
+                "is_duplicate_job": False,
+                "company_name": company_name,
+                "job_id": job_id,
+                "cached_rating": job_check.get('cached_rating'),
+                "cached_review_count": job_check.get('cached_review_count')
+            }
     else:
-        # Company doesn't exist and not auto-adding
-        return {
-            "enabled": True,
-            "exists": False,
-            "company_name": company_name
-        }
+        # Company doesn't exist at all
+        if auto_add:
+            # Add the company with this job
+            success = sheets_service.add_job_application(
+                spreadsheet_url=spreadsheet_url,
+                company_name=company_name,
+                job_url="",  # Will be filled when they actually apply
+                job_id=job_id,
+                additional_data={}
+            )
+            return {
+                "enabled": True,
+                "exists": False,
+                "is_duplicate_job": False,
+                "added": success,
+                "company_name": company_name,
+                "job_id": job_id
+            }
+        else:
+            return {
+                "enabled": True,
+                "exists": False,
+                "is_duplicate_job": False,
+                "company_name": company_name,
+                "job_id": job_id
+            }
 
 
 
@@ -190,6 +243,9 @@ class GlassdoorUpdateRequest(BaseModel):
     rating: float
     reviewCount: Optional[int] = None
     glassdoorUrl: Optional[str] = None
+    recommendPct: Optional[int] = None
+    ceoPct: Optional[int] = None
+    medianPay: Optional[str] = None
 
 
 @router.post("/update-glassdoor")
@@ -228,7 +284,10 @@ async def update_glassdoor_data(request: GlassdoorUpdateRequest):
         company_name=request.companyName,
         rating=request.rating,
         review_count=request.reviewCount,
-        glassdoor_url=request.glassdoorUrl
+        glassdoor_url=request.glassdoorUrl,
+        recommend_pct=request.recommendPct,
+        ceo_pct=request.ceoPct,
+        median_pay=request.medianPay
     )
 
     if success:

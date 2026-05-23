@@ -182,10 +182,168 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'getCompanyName') {
         console.log('[RESUME_RAG] Company name requested');
         const companyName = extractCompanyName();
-        sendResponse({ success: true, companyName: companyName || null });
+        const jobId = extractJobId();
+        const jobTitle = extractJobTitle();
+        sendResponse({
+            success: true,
+            companyName: companyName || null,
+            jobId: jobId || null,
+            jobTitle: jobTitle || null
+        });
         return true;
     }
 });
+
+// Helper function to extract job title from page
+function extractJobTitle() {
+    console.log('[RESUME_RAG] Extracting job title');
+
+    // Look for common patterns in headings
+    const headings = document.querySelectorAll('h1, h2, h3');
+    for (const heading of headings) {
+        const text = heading.textContent?.trim();
+        if (text && text.length > 5 && text.length < 150) {
+            // Check if it looks like a job title (contains job-related words)
+            const jobKeywords = /engineer|developer|designer|manager|analyst|specialist|coordinator|director|lead|senior|junior|architect|scientist|administrator|consultant/i;
+            if (jobKeywords.test(text)) {
+                // Make sure it's not the company name or other metadata
+                if (!/glassdoor|linkedin|indeed|apply|careers|jobs|welcome/i.test(text)) {
+                    console.log('[RESUME_RAG] Job title from heading:', text);
+                    return text;
+                }
+            }
+        }
+    }
+
+    // Try page title
+    const title = document.title;
+    if (title) {
+        // Extract job title from patterns like "Job Title - Company" or "Job Title | Company"
+        const parts = title.split(/[\|\-–—]/);
+        if (parts.length > 1) {
+            const jobKeywords = /engineer|developer|designer|manager|analyst|specialist|coordinator|director|lead|senior|junior|architect|scientist|administrator|consultant/i;
+
+            // Check first part (usually job title)
+            const firstPart = parts[0].trim();
+            if (jobKeywords.test(firstPart) && firstPart.length > 5 && firstPart.length < 150) {
+                console.log('[RESUME_RAG] Job title from page title:', firstPart);
+                return firstPart;
+            }
+        }
+    }
+
+    console.log('[RESUME_RAG] No job title found');
+    return null;
+}
+
+// Helper function to extract job ID from URL or page
+function extractJobId() {
+    const url = window.location.href;
+    const pathname = window.location.pathname;
+    const hostname = window.location.hostname;
+
+    console.log('[RESUME_RAG] Extracting job ID from:', url);
+
+    // Try URL patterns for different job boards
+    let jobId = null;
+
+    // 1. Greenhouse: job-boards.greenhouse.io/company/jobs/12345678
+    if (hostname.includes('greenhouse.io')) {
+        const match = pathname.match(/\/jobs\/(\d+)/);
+        if (match) {
+            jobId = match[1];
+            console.log('[RESUME_RAG] Job ID from Greenhouse URL:', jobId);
+            return jobId;
+        }
+    }
+
+    // 2. Lever: jobs.lever.co/company/job-slug/apply
+    if (hostname.includes('lever.co')) {
+        const match = pathname.match(/\/([^\/]+)\/apply/);
+        if (match) {
+            jobId = match[1]; // Use the job slug as ID
+            console.log('[RESUME_RAG] Job ID from Lever URL:', jobId);
+            return jobId;
+        }
+    }
+
+    // 3. LinkedIn: linkedin.com/jobs/view/12345678
+    if (hostname.includes('linkedin.com')) {
+        const match = url.match(/\/jobs\/view\/(\d+)/);
+        if (match) {
+            jobId = match[1];
+            console.log('[RESUME_RAG] Job ID from LinkedIn URL:', jobId);
+            return jobId;
+        }
+    }
+
+    // 4. Glassdoor: glassdoor.com/job-listing/...?jl=12345678
+    if (hostname.includes('glassdoor.com')) {
+        const match = url.match(/[?&]jl=(\d+)/);
+        if (match) {
+            jobId = match[1];
+            console.log('[RESUME_RAG] Job ID from Glassdoor URL:', jobId);
+            return jobId;
+        }
+    }
+
+    // 5. Dice: dice.com/jobs/detail/...?jobid=12345
+    if (hostname.includes('dice.com')) {
+        const match = url.match(/[?&]jobid=([^&]+)/i);
+        if (match) {
+            jobId = match[1];
+            console.log('[RESUME_RAG] Job ID from Dice URL:', jobId);
+            return jobId;
+        }
+    }
+
+    // 6. JobRight.ai: jobright.ai/job/12345 or various patterns
+    if (hostname.includes('jobright.ai')) {
+        const match = url.match(/\/job\/([^\/\?]+)/);
+        if (match) {
+            jobId = match[1];
+            console.log('[RESUME_RAG] Job ID from JobRight URL:', jobId);
+            return jobId;
+        }
+        // Also check for jr_id parameter
+        const paramMatch = url.match(/[?&]jr_id=([^&]+)/);
+        if (paramMatch) {
+            jobId = paramMatch[1];
+            console.log('[RESUME_RAG] Job ID from JobRight jr_id:', jobId);
+            return jobId;
+        }
+    }
+
+    // 7. Generic: Look for common ID patterns in URL
+    // Match patterns like: /12345678, ?id=12345, ?jobId=abc123, etc.
+    const genericMatch = url.match(/(?:\/|[?&](?:job)?[_-]?id[=\/])([a-zA-Z0-9-_]+)/i);
+    if (genericMatch && genericMatch[1].length >= 6) {
+        jobId = genericMatch[1];
+        console.log('[RESUME_RAG] Job ID from generic URL pattern:', jobId);
+        return jobId;
+    }
+
+    // 8. Fallback: Extract from page content
+    // Look for "Job ID", "Req ID", "Requisition", etc.
+    const pageText = document.body.textContent || '';
+    const contentPatterns = [
+        /(?:Job|Req|Requisition)\s*(?:ID|#|Number)[\s:]*([A-Z0-9-_]+)/i,
+        /(?:Reference|Ref)\s*(?:ID|#|Number)[\s:]*([A-Z0-9-_]+)/i,
+        /JOB\s*ID[\s:]*([A-Z0-9-_]+)/i
+    ];
+
+    for (const pattern of contentPatterns) {
+        const match = pageText.match(pattern);
+        if (match && match[1].length >= 4) {
+            jobId = match[1];
+            console.log('[RESUME_RAG] Job ID from page content:', jobId);
+            return jobId;
+        }
+    }
+
+    console.log('[RESUME_RAG] No job ID found');
+    return null;
+}
 
 // Helper function to extract company name from page
 function extractCompanyName() {
@@ -196,6 +354,28 @@ function extractCompanyName() {
     const url = window.location.href;
     const pathname = window.location.pathname;
     const hostname = window.location.hostname;
+
+    // Special handling for Glassdoor pages - extract from URL or page title
+    if (hostname.includes('glassdoor.com')) {
+        // Extract from URL pattern: /Working-at-Mutt-Data-EI_IE4910049
+        const urlMatch = url.match(/Working-at-(.+?)-EI_/);
+        if (urlMatch) {
+            const companyName = urlMatch[1].replace(/-/g, ' ');
+            console.log('[RESUME_RAG] Company from Glassdoor URL:', companyName);
+            return companyName;
+        }
+        // Extract from page title: "Mutt Data Reviews | Glassdoor"
+        const titleMatch = document.title.match(/^([^|]+)/);
+        if (titleMatch) {
+            let companyName = titleMatch[1].trim();
+            // Remove common suffixes
+            companyName = companyName.replace(/\s+(Reviews?|Overview|Salaries|Jobs|Interviews)\s*$/i, '').trim();
+            if (companyName && companyName.toLowerCase() !== 'glassdoor') {
+                console.log('[RESUME_RAG] Company from Glassdoor title:', companyName);
+                return companyName;
+            }
+        }
+    }
 
     // Pattern 1: /company-name/job or /company-name/apply (standard)
     let pathMatch = pathname.match(/^\/([^\/]+)\/(jobs?|apply|careers|positions?)/i);
@@ -2007,17 +2187,141 @@ function detectGlassdoorPage() {
         }
     }
 
+    // Extract additional Glassdoor stats (only on overview pages, not search)
+    let recommendPct = null;
+    let ceoPct = null;
+    let medianPay = null;
+
+    if (isOverviewPage) {
+        const pageText = document.body.textContent;
+        console.log('[RESUME_RAG] Extracting additional Glassdoor stats from overview page');
+
+        // Method 1: Extract "Recommend to a friend" percentage
+        // Look for patterns like "72% would recommend to a friend"
+        const recommendPatterns = [
+            /(\d+)%\s+would\s+recommend/i,
+            /(\d+)%\s+recommend/i,
+            /recommend(?:ation)?\s*[:\-]?\s*(\d+)%/i,
+            /would\s+recommend\s+to\s+a\s+friend\s*[:\-]?\s*(\d+)%/i
+        ];
+        for (const pattern of recommendPatterns) {
+            const match = pageText.match(pattern);
+            if (match) {
+                recommendPct = parseInt(match[1]);
+                console.log('[RESUME_RAG] Found recommend %:', recommendPct);
+                break;
+            }
+        }
+
+        // Method 2: Extract CEO approval percentage
+        // Look for patterns like "85% Approve of CEO" or "Approval of CEO"
+        const ceoPatterns = [
+            /(\d+)%\s+approve\s+of\s+(?:ceo|CEO)/i,
+            /approve\s+of\s+(?:ceo|CEO)\s*[:\-]?\s*(\d+)%/i,
+            /(?:ceo|CEO)\s+approval\s*[:\-]?\s*(\d+)%/i,
+            /(\d+)%\s+(?:ceo|CEO)/i
+        ];
+        for (const pattern of ceoPatterns) {
+            const match = pageText.match(pattern);
+            if (match) {
+                ceoPct = parseInt(match[1]);
+                console.log('[RESUME_RAG] Found CEO approval %:', ceoPct);
+                break;
+            }
+        }
+
+        // Method 3: Extract median total pay
+        // Look for patterns like "$120K" or "$120,000" near "salary" or "pay" keywords
+        const payPatterns = [
+            /\$\s*([\d,]+[KkMm]?)\s+median/i,
+            /median\s+total\s+pay\s*[:\-]?\s*\$?\s*([\d,]+[KkMm]?)/i,
+            /total\s+pay\s*[:\-]?\s*\$?\s*([\d,]+[KkMm]?)/i,
+            /median\s+base\s+salary\s*[:\-]?\s*\$?\s*([\d,]+[KkMm]?)/i
+        ];
+        for (const pattern of payPatterns) {
+            const match = pageText.match(pattern);
+            if (match) {
+                medianPay = match[1];
+                // Normalize format: add $ if missing, keep K/M suffix
+                if (!medianPay.startsWith('$')) {
+                    medianPay = '$' + medianPay;
+                }
+                console.log('[RESUME_RAG] Found median pay:', medianPay);
+                break;
+            }
+        }
+
+        // Method 4: Try to find stats in structured elements
+        // Look for common Glassdoor class names and data attributes
+        if (!recommendPct || !ceoPct || !medianPay) {
+            const statElements = document.querySelectorAll('[data-test*="rating"], [class*="Rating"], [class*="stat"]');
+            for (const elem of statElements) {
+                const text = elem.textContent || '';
+
+                if (!recommendPct && /recommend/i.test(text)) {
+                    const match = text.match(/(\d+)%/);
+                    if (match) {
+                        recommendPct = parseInt(match[1]);
+                        console.log('[RESUME_RAG] Found recommend % in element:', recommendPct);
+                    }
+                }
+
+                if (!ceoPct && /ceo/i.test(text)) {
+                    const match = text.match(/(\d+)%/);
+                    if (match) {
+                        ceoPct = parseInt(match[1]);
+                        console.log('[RESUME_RAG] Found CEO % in element:', ceoPct);
+                    }
+                }
+
+                if (!medianPay && /pay|salary/i.test(text)) {
+                    const match = text.match(/\$?([\d,]+[KkMm]?)/);
+                    if (match) {
+                        medianPay = match[1];
+                        if (!medianPay.startsWith('$')) {
+                            medianPay = '$' + medianPay;
+                        }
+                        console.log('[RESUME_RAG] Found median pay in element:', medianPay);
+                    }
+                }
+            }
+        }
+    }
+
     if (!rating) {
         console.log('[RESUME_RAG] Could not extract rating from Glassdoor page');
         return null;
     }
 
-    return {
+    const glassdoorData = {
         companyName: companyName,
         rating: rating,
         reviewCount: reviewCount,
         glassdoorUrl: url
     };
+
+    // Add optional fields if found
+    if (recommendPct !== null) {
+        glassdoorData.recommendPct = recommendPct;
+    }
+    if (ceoPct !== null) {
+        glassdoorData.ceoPct = ceoPct;
+    }
+    if (medianPay !== null) {
+        glassdoorData.medianPay = medianPay;
+    }
+
+    // Log what we found
+    console.log('[RESUME_RAG] Glassdoor data extracted:', {
+        company: companyName,
+        rating: rating,
+        reviewCount: reviewCount,
+        recommendPct: recommendPct,
+        ceoPct: ceoPct,
+        medianPay: medianPay
+    });
+
+    return glassdoorData;
 }
 
 // Send Glassdoor data to backend to update spreadsheet
@@ -2041,7 +2345,7 @@ async function updateSpreadsheetWithGlassdoor(glassdoorData) {
 
         if (result.updated) {
             // Show a subtle notification
-            showGlassdoorUpdateNotification(glassdoorData.companyName, glassdoorData.rating);
+            showGlassdoorUpdateNotification(glassdoorData);
         }
 
         return result;
@@ -2052,7 +2356,7 @@ async function updateSpreadsheetWithGlassdoor(glassdoorData) {
 }
 
 // Show a subtle notification when Glassdoor data is captured
-function showGlassdoorUpdateNotification(companyName, rating) {
+function showGlassdoorUpdateNotification(glassdoorData) {
     const notification = document.createElement('div');
     notification.style.cssText = `
         position: fixed;
@@ -2067,9 +2371,24 @@ function showGlassdoorUpdateNotification(companyName, rating) {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         font-size: 14px;
         animation: slideIn 0.3s ease-out;
+        max-width: 350px;
     `;
+
+    // Build stats summary
+    const stats = [`★ ${glassdoorData.rating}`];
+    if (glassdoorData.recommendPct) {
+        stats.push(`${glassdoorData.recommendPct}% recommend`);
+    }
+    if (glassdoorData.ceoPct) {
+        stats.push(`${glassdoorData.ceoPct}% CEO`);
+    }
+    if (glassdoorData.medianPay) {
+        stats.push(`${glassdoorData.medianPay} pay`);
+    }
+
     notification.innerHTML = `
-        ✓ Updated spreadsheet: ${companyName} (★ ${rating})
+        <div style="font-weight: 600; margin-bottom: 4px;">✓ Updated: ${glassdoorData.companyName}</div>
+        <div style="font-size: 12px; opacity: 0.9;">${stats.join(' • ')}</div>
     `;
 
     // Add animation
@@ -2112,11 +2431,14 @@ function checkAndUpdateGlassdoor() {
 // Run check after page loads
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
-        setTimeout(checkAndUpdateGlassdoor, 2000); // Wait for dynamic content
+        setTimeout(checkAndUpdateGlassdoor, 3000); // Wait for dynamic content
     });
 } else {
-    setTimeout(checkAndUpdateGlassdoor, 2000);
+    setTimeout(checkAndUpdateGlassdoor, 3000);
 }
+
+// Also check again after a longer delay for very slow loading pages
+setTimeout(checkAndUpdateGlassdoor, 5000);
 
 // Also check when page content changes (for SPAs)
 const glassdoorObserver = new MutationObserver(() => {
