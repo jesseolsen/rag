@@ -171,19 +171,15 @@ class GoogleSheetsService:
                         rating = None
                         review_count = None
 
-                        # Column F (index 5) = Glassdoor Rating
-                        if len(row) > 5 and row[5]:
+                        # Column C (index 2) = Glassdoor Stars (5)
+                        if len(row) > 2 and row[2]:
                             try:
-                                rating = float(row[5])
+                                rating = float(row[2])
                             except (ValueError, TypeError):
                                 pass
 
-                        # Column G (index 6) = Review Count
-                        if len(row) > 6 and row[6]:
-                            try:
-                                review_count = int(row[6])
-                            except (ValueError, TypeError):
-                                pass
+                        # Review count not stored in spreadsheet currently
+                        # Could be extracted from Glassdoor page if needed
 
                         return {
                             'exists': True,
@@ -362,28 +358,29 @@ class GoogleSheetsService:
                 print(f"[GOOGLE_SHEETS] Company '{company_name}' not found in spreadsheet")
                 return False
 
-            # Determine which columns to update
-            # Assuming columns: A=Company, B=Position, C=Date, D=Status, E=Notes, F=Glassdoor Rating, G=Review Count
-            # Adjust based on your actual spreadsheet structure
+            # Column structure based on user's spreadsheet:
+            # A=Company, B=GD Rating (2025), C=Glassdoor Stars (5), D=Recommend to friend %,
+            # E=GD/CEO %, F=Median Total Pay, G=Applied Date, ...
 
             # Get the current row to preserve existing data
             current_row = values[row_index]
 
-            # Ensure row has enough columns
-            while len(current_row) < 7:
+            # Ensure row has enough columns (at least through column E)
+            while len(current_row) < 5:
                 current_row.append('')
 
-            # Update Glassdoor columns (F and G, which are indices 5 and 6)
-            current_row[5] = rating  # Column F: Glassdoor Rating
-            if review_count is not None:
-                current_row[6] = review_count  # Column G: Review Count
+            # Update Glassdoor star rating in column C (index 2)
+            current_row[2] = rating  # Column C: Glassdoor Stars (5)
+
+            # Note: Review count and other stats (recommend %, CEO %, median pay)
+            # would need to be extracted separately and put in columns D, E, F
 
             # Update the row
             row_number = row_index + 1
-            update_range = f'{sheet_name}!A{row_number}:G{row_number}'
+            update_range = f'{sheet_name}!A{row_number}:F{row_number}'
 
             body = {
-                'values': [current_row[:7]]  # Only update first 7 columns
+                'values': [current_row[:6]]  # Update first 6 columns
             }
 
             self.service.spreadsheets().values().update(
