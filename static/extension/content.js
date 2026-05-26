@@ -220,7 +220,7 @@ function extractJobTitle() {
             const jobKeywords = /engineer|developer|designer|manager|analyst|specialist|coordinator|director|lead|senior|junior|architect|scientist|administrator|consultant|ai|software|data|product/i;
             if (jobKeywords.test(text)) {
                 // Make sure it's not the company name or other metadata
-                if (!/glassdoor|linkedin|indeed|apply now|careers|jobs|welcome|notifications/i.test(text)) {
+                if (!/glassdoor|linkedin|indeed|apply now|careers|jobs|welcome|notifications|do not sell|personal data|privacy|cookie|terms of/i.test(text)) {
                     console.log('[RESUME_RAG] ✓ Job title from heading:', text);
                     return text;
                 } else {
@@ -443,9 +443,13 @@ function extractCompanyName() {
     }
 
     // Robert Half: client company is confidential — track under "Robert Half"
+    // Only trigger on actual job listing pages (/job/ in path), not homepage/search
     if (hostname.includes('roberthalf.com')) {
-        console.log('[RESUME_RAG] Robert Half job page — client company not disclosed, using "Robert Half"');
-        return 'Robert Half';
+        if (pathname.includes('/job/')) {
+            console.log('[RESUME_RAG] Robert Half job listing — using "Robert Half" as company');
+            return 'Robert Half';
+        }
+        return null;
     }
 
     // Special handling for Glassdoor pages - extract from URL or page title
