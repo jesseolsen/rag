@@ -24,7 +24,7 @@ This launches Chrome with the extension and runs automated tests.
 
 1. Start the backend:
    ```bash
-   cd ~/code/jesseolsen/rag
+   cd ~/code/rag
    source venv/bin/activate
    uvicorn app.main:app --reload
    ```

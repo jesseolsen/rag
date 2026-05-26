@@ -83,7 +83,7 @@ This will display the email and copy it to your clipboard.
 
 ### 6b. Share the spreadsheet:
 
-1. **Open your spreadsheet:** https://docs.google.com/spreadsheets/d/1gWm8wGRAhY7Cfd92cjJm2STSaV3U8CLqoomqEPoCXjo/edit
+1. **Open your spreadsheet:** https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit
 
 2. Click **SHARE** button (top right)
 
@@ -133,7 +133,7 @@ Google Sheets integration is fully operational!
    - Submit the application
 
 3. **Check Your Spreadsheet:**
-   - Open: https://docs.google.com/spreadsheets/d/1gWm8wGRAhY7Cfd92cjJm2STSaV3U8CLqoomqEPoCXjo/edit
+   - Open: https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit
    - You should see a new row with:
      - Company name (clickable, links to the job page)
      - Date applied (today's date)

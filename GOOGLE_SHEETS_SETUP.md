@@ -41,7 +41,7 @@ Created `/api/v1/tracking/job-application` that handles:
 ## Configuration in .env
 
 ```bash
-GOOGLE_SPREADSHEET=https://docs.google.com/spreadsheets/d/1gWm8wGRAhY7Cfd92cjJm2STSaV3U8CLqoomqEPoCXjo/edit?gid=653006663#gid=653006663
+GOOGLE_SPREADSHEET=https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit?gid=653006663#gid=653006663
 GOOGLE_SHEETS_CREDENTIALS_FILE=credentials/google-sheets-service-account.json
 ```
 
@@ -63,7 +63,7 @@ The integration is code-complete, but you need to set up Google Cloud credential
 ### Step 2: Share Spreadsheet
 
 1. Open the JSON file and copy the `client_email` (looks like `name@project.iam.gserviceaccount.com`)
-2. Open your [Google Spreadsheet](https://docs.google.com/spreadsheets/d/1gWm8wGRAhY7Cfd92cjJm2STSaV3U8CLqoomqEPoCXjo/edit)
+2. Open your [Google Spreadsheet](https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit)
 3. Click **Share**
 4. Add the service account email with **Editor** access
 

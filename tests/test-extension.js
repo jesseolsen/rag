@@ -88,7 +88,7 @@ async function checkBackendHealth() {
         return true;
     } catch (error) {
         console.error('✗ Backend is not running. Start it with:');
-        console.error('  cd ~/code/jesseolsen/rag && source venv/bin/activate && uvicorn app.main:app --reload');
+        console.error('  cd ~/code/rag && source venv/bin/activate && uvicorn app.main:app --reload');
         return false;
     }
 }
@@ -146,15 +146,15 @@ async function runTests() {
         // Test 2: Fill basic fields
         console.log('Test 2: Fill basic fields');
         await page.evaluate(() => {
-            document.getElementById('first_name').value = 'Jesse';
-            document.getElementById('last_name').value = 'Olsen';
-            document.getElementById('email').value = 'mejesseolsen@gmail.com';
-            document.getElementById('phone').value = '(970) 391-1018';
+            document.getElementById('first_name').value = 'Jane';
+            document.getElementById('last_name').value = 'Smith';
+            document.getElementById('email').value = 'jane.smith@example.com';
+            document.getElementById('phone').value = '(555) 000-1234';
         });
 
         const fieldsFilledCorrectly = await page.evaluate(() => {
-            return document.getElementById('first_name').value === 'Jesse' &&
-                   document.getElementById('last_name').value === 'Olsen';
+            return document.getElementById('first_name').value === 'Jane' &&
+                   document.getElementById('last_name').value === 'Smith';
         });
         console.log(fieldsFilledCorrectly ? '  ✅ PASS' : '  ❌ FAIL', '\n');
 

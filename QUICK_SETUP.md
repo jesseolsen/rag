@@ -31,7 +31,7 @@ Or follow these direct links:
 - Save file as: `credentials/google-sheets-service-account.json`
 
 ### 5. Share Spreadsheet (1 minute)
-🔗 https://docs.google.com/spreadsheets/d/1gWm8wGRAhY7Cfd92cjJm2STSaV3U8CLqoomqEPoCXjo/edit
+🔗 https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit
 
 1. Open the JSON file you just downloaded
 2. Find `"client_email"` - it looks like: `resume-rag-sheets@your-project.iam.gserviceaccount.com`

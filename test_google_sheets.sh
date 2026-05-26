@@ -92,7 +92,7 @@ if [ "$ENABLED" = "True" ] && [ "$SERVICE_INIT" = "True" ]; then
     echo "  2. Navigate to a job application page"
     echo "  3. Fill out and submit the form"
     echo "  4. Check your spreadsheet:"
-    echo "     https://docs.google.com/spreadsheets/d/1gWm8wGRAhY7Cfd92cjJm2STSaV3U8CLqoomqEPoCXjo/edit"
+    echo "     https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit"
     echo ""
     echo "You should see a new row with the company name (hyperlinked) and today's date!"
     echo ""
