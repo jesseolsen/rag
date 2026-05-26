@@ -246,7 +246,7 @@ async def check_company_exists(
 class GlassdoorUpdateRequest(BaseModel):
     """Request to update spreadsheet with Glassdoor data."""
     companyName: str
-    rating: float
+    rating: Optional[float] = None
     reviewCount: Optional[int] = None
     glassdoorUrl: Optional[str] = None
     recommendPct: Optional[int] = None

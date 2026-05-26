@@ -312,7 +312,7 @@ class GoogleSheetsService:
         self,
         spreadsheet_url: str,
         company_name: str,
-        rating: float,
+        rating: Optional[float] = None,
         review_count: Optional[int] = None,
         glassdoor_url: Optional[str] = None,
         recommend_pct: Optional[int] = None,
@@ -367,10 +367,12 @@ class GoogleSheetsService:
                 return False
 
         try:
-            # Read all values to find the company row
+            # FORMULA rendering preserves existing =HYPERLINK(...) formulas in C-G
+            # so a salary-only update doesn't clobber the overview-page hyperlinks
             result = self.service.spreadsheets().values().get(
                 spreadsheetId=spreadsheet_id,
-                range=f'{sheet_name}!A:Z'
+                range=f'{sheet_name}!A:Z',
+                valueRenderOption='FORMULA'
             ).execute()
 
             values = result.get('values', [])
@@ -424,8 +426,9 @@ class GoogleSheetsService:
                     return f'=HYPERLINK("{safe_url}", "{value}")'
                 return value
 
-            # Update Glassdoor star rating in column C (index 2)
-            current_row[2] = _gd_link(rating)  # Column C: Glassdoor Stars (5)
+            # Update Glassdoor star rating in column C (index 2) — only when provided
+            if rating is not None:
+                current_row[2] = _gd_link(rating)  # Column C: Glassdoor Stars (5)
 
             # Update Recommend to friend % in column D (index 3)
             if recommend_pct is not None:

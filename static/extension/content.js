@@ -424,6 +424,20 @@ function extractCompanyName() {
 
     // Special handling for Glassdoor pages - extract from URL or page title
     if (hostname.includes('glassdoor.com')) {
+        // Salary page: /Salary/Company-Job-Salaries-EXXXX_D_KOstart,end.htm
+        // KO offset reliably marks where the job title starts in the slug
+        const salaryMatch = url.match(/\/Salary\/(.+?)-Salaries-E\d+(?:[^K]*KO(\d+),)/i);
+        if (salaryMatch) {
+            const fullSlug = salaryMatch[1];
+            const koStart = parseInt(salaryMatch[2]);
+            if (koStart > 0) {
+                const companySlug = fullSlug.substring(0, koStart - 1);
+                const companyName = companySlug.replace(/-/g, ' ');
+                console.log('[RESUME_RAG] Company from Glassdoor salary URL:', companyName);
+                return companyName;
+            }
+        }
+
         // Extract from URL pattern: /Working-at-Mutt-Data-EI_IE4910049
         const urlMatch = url.match(/Working-at-(.+?)-EI_/);
         if (urlMatch) {
@@ -2256,6 +2270,65 @@ async function captureAnswersFromCurrentForm(backendUrl, filledFields) {
 // GLASSDOOR AUTO-UPDATE FEATURE
 // ============================================================================
 
+// Extract pay range from a Glassdoor salary page and return data for column G
+function detectGlassdoorSalaryPage(url) {
+    // Extract company name using the KO offset (marks where job title starts in the slug)
+    let companyName = null;
+    const koMatch = url.match(/\/Salary\/(.+?)-Salaries-E\d+(?:[^K]*KO(\d+),)/i);
+    if (koMatch) {
+        const fullSlug = koMatch[1];
+        const koStart = parseInt(koMatch[2]);
+        if (koStart > 0) {
+            companyName = fullSlug.substring(0, koStart - 1).replace(/-/g, ' ');
+        }
+    }
+    // Fallback: page title "Job Title Salaries at Company | Glassdoor"
+    if (!companyName) {
+        const titleMatch = document.title.match(/\bSalaries?\s+at\s+(.+?)(?:\s*[|–—-]|$)/i);
+        if (titleMatch) companyName = titleMatch[1].trim();
+    }
+
+    if (!companyName || companyName.toLowerCase() === 'glassdoor') {
+        console.log('[RESUME_RAG] Could not extract company name from Glassdoor salary page');
+        return null;
+    }
+    console.log('[RESUME_RAG] Glassdoor salary page for:', companyName);
+
+    const pageText = document.body.textContent;
+    let payRange = null;
+
+    // Range with en/em dash: "$74K – $147K"
+    const dashRangeMatch = pageText.match(/\$([\d,]+[KkMm]?)\s*[–—]\s*\$([\d,]+[KkMm]?)/);
+    if (dashRangeMatch) {
+        payRange = `$${dashRangeMatch[1].toUpperCase()}-$${dashRangeMatch[2].toUpperCase()}`;
+    }
+    // Range with hyphen and spaces: "$74K - $147K"
+    if (!payRange) {
+        const hyphenRangeMatch = pageText.match(/\$([\d,]+[KkMm]?)\s+-\s+\$([\d,]+[KkMm]?)/);
+        if (hyphenRangeMatch) {
+            payRange = `$${hyphenRangeMatch[1].toUpperCase()}-$${hyphenRangeMatch[2].toUpperCase()}`;
+        }
+    }
+    // Single value fallback: "$108K/yr"
+    if (!payRange) {
+        const singleMatch = pageText.match(/\$([\d,]+[KkMm]+)\s*\/\s*yr/i);
+        if (singleMatch) payRange = `$${singleMatch[1].toUpperCase()}`;
+    }
+
+    if (!payRange) {
+        console.log('[RESUME_RAG] Could not extract pay range from Glassdoor salary page');
+        return null;
+    }
+    console.log('[RESUME_RAG] Extracted pay range:', payRange, 'for', companyName);
+
+    return {
+        companyName: companyName,
+        glassdoorUrl: url,
+        medianPay: payRange
+        // No rating — salary pages don't show the overall company rating
+    };
+}
+
 // Detect if we're on a Glassdoor company overview page and extract rating
 function detectGlassdoorPage() {
     const url = window.location.href;
@@ -2266,11 +2339,16 @@ function detectGlassdoorPage() {
         return null;
     }
 
-    // ONLY allow Overview or Reviews pages, NOT search results
+    // ONLY allow Overview, Reviews, or Salary pages
     const isOverviewPage = url.includes('/Overview/Working-at-') || url.includes('/Reviews/');
+    const isSalaryPage = url.includes('/Salary/') && url.includes('-Salaries-');
+
+    if (isSalaryPage) {
+        return detectGlassdoorSalaryPage(url);
+    }
 
     if (!isOverviewPage) {
-        console.log('[RESUME_RAG] Skipping Glassdoor page - not a company overview/reviews page');
+        console.log('[RESUME_RAG] Skipping Glassdoor page - not a company overview/reviews/salary page');
         return null;
     }
 

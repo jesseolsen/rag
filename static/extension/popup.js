@@ -179,10 +179,11 @@ async function checkCompanyStatus(companyName, jobId, statusIndicator, jobTitle,
     companyCheckInProgress = true;
 
     try {
-        // Glassdoor company/overview pages are for research, not job applications — don't create a row
+        // Glassdoor company/overview/salary pages are for research, not job applications — don't create a row
         const isGlassdoorCompanyPage = jobUrl && (
             jobUrl.includes('glassdoor.com/Overview/') ||
-            jobUrl.includes('glassdoor.com/Reviews/')
+            jobUrl.includes('glassdoor.com/Reviews/') ||
+            (jobUrl.includes('glassdoor.com/Salary/') && jobUrl.includes('-Salaries-'))
         );
         // Check company/job status (will auto-add with full details if new)
         let url = `${backendUrl}/api/v1/tracking/check-company?company_name=${encodeURIComponent(companyName)}&auto_add=${!isGlassdoorCompanyPage}`;
