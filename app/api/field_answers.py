@@ -166,10 +166,14 @@ async def search_field_answers(
     result = await db.execute(select(FormFieldAnswer))
     all_answers = result.scalars().all()
 
+    # Always require only 1 match for more lenient matching
+    # This allows "location" to match "where is your working location"
+    min_matches = 1
+
     # Score each answer
     scored_answers = []
     for answer in all_answers:
-        score = fuzzy_match_keywords(query_keywords, answer.question_keywords, min_matches=2)
+        score = fuzzy_match_keywords(query_keywords, answer.question_keywords, min_matches=min_matches)
         if score > 0:  # Only return matches with score > 0
             scored_answers.append({
                 'id': answer.id,

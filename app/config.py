@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from typing import Optional
 
 
 class Settings(BaseSettings):
@@ -22,6 +23,10 @@ class Settings(BaseSettings):
     generation_model: str = "claude-opus-4-7"
     context_chunk_count: int = 10
     max_generation_tokens: int = 2000
+
+    # Google Sheets Integration (optional)
+    google_spreadsheet: Optional[str] = None
+    google_sheets_credentials_file: Optional[str] = None
 
     class Config:
         env_file = ".env"

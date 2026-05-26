@@ -141,13 +141,18 @@
             padding: 8px;
         }
         .upload-status code {
-            background: #f5f5f5;
-            padding: 2px 4px;
-            border-radius: 3px;
-            font-family: 'Courier New', monospace;
-            font-size: 10px;
-            display: inline-block;
-            margin-top: 4px;
+            background: #fff8e8;
+            border: 1px solid #e0c27a;
+            color: #6d3b07;
+            padding: 8px 10px;
+            border-radius: 4px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 12px;
+            line-height: 1.4;
+            display: block;
+            margin-top: 6px;
+            white-space: pre-wrap;
+            word-break: break-word;
         }
         .upload-status small {
             display: block;
@@ -157,21 +162,26 @@
         #noResumes {
             padding: 12px;
             text-align: center;
-            color: #999;
-            font-size: 12px;
+            color: #555;
+            font-size: 13px;
             line-height: 1.6;
             background: #fafafa;
             border-radius: 4px;
         }
         #noResumes code {
-            background: #f0f0f0;
-            padding: 4px;
-            border-radius: 3px;
-            font-family: 'Courier New', monospace;
-            font-size: 10px;
-            display: inline-block;
-            margin-top: 4px;
-            white-space: nowrap;
+            background: #fff8e8;
+            border: 1px solid #e0c27a;
+            color: #6d3b07;
+            padding: 8px 10px;
+            border-radius: 4px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 12px;
+            line-height: 1.4;
+            display: block;
+            margin-top: 6px;
+            white-space: pre-wrap;
+            word-break: break-word;
+            text-align: left;
         }
         #noResumes strong {
             display: block;
@@ -259,15 +269,21 @@
         }
         .server-error p {
             margin: 4px 0;
-            font-size: 12px;
+            font-size: 13px;
             line-height: 1.4;
         }
         .server-error code {
-            background: #fff3e0;
-            padding: 2px 4px;
-            border-radius: 2px;
-            font-family: monospace;
-            font-size: 11px;
+            background: #fff8e8;
+            border: 1px solid #e0c27a;
+            color: #6d3b07;
+            padding: 8px 10px;
+            border-radius: 4px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 12px;
+            line-height: 1.4;
+            white-space: pre-wrap;
+            word-break: break-word;
+            display: block;
         }
         .server-error a {
             color: #1976d2;
@@ -276,117 +292,119 @@
         .server-error a:hover {
             text-decoration: underline;
         }
+        .startup-command {
+            margin-top: 6px;
+        }
         .field-answers-list {
             list-style: none;
             padding: 0;
             margin: 0;
             border: 1px solid #ddd;
             border-radius: 4px;
-            max-height: 200px;
+            max-height: 300px;
             overflow-y: auto;
             background: white;
         }
         .field-answer-item {
-            display: flex;
-            flex-direction: column;
+            display: grid;
+            grid-template-columns: 120px 1fr auto;
+            align-items: start;
             padding: 8px;
             border-bottom: 1px solid #eee;
-            gap: 4px;
-            font-size: 11px;
+            gap: 8px;
+            font-size: 12px;
         }
         .field-answer-item:last-child {
             border-bottom: none;
         }
+        .field-answer-item:hover {
+            background: #f9f9f9;
+        }
+        .field-answer-item.newly-added {
+            background: #c8e6c9;
+            animation: fadeToWhite 3s ease-in-out forwards;
+        }
+        @keyframes fadeToWhite {
+            0% {
+                background: #c8e6c9;
+            }
+            70% {
+                background: #c8e6c9;
+            }
+            100% {
+                background: white;
+            }
+        }
         .field-answer-question {
             font-weight: 600;
-            color: #333;
+            color: #555;
             word-break: break-word;
+            line-height: 1.3;
+            padding-top: 2px;
+        }
+        .field-answer-value {
+            display: flex;
+            align-items: center;
+            gap: 4px;
         }
         .field-answer-text {
-            color: #666;
-            background: #f5f5f5;
-            padding: 4px;
-            border-radius: 2px;
+            color: #333;
+            padding: 4px 8px;
+            border-radius: 3px;
             word-break: break-word;
-            white-space: pre-wrap;
-            max-height: 60px;
-            overflow: hidden;
+            line-height: 1.3;
+            background: #f5f5f5;
+            flex: 1;
+            cursor: pointer;
+            transition: background 0.2s;
         }
-        .field-answer-meta {
-            color: #999;
-            font-size: 10px;
+        .field-answer-text:hover {
+            background: #ebebeb;
+        }
+        .field-answer-input {
+            color: #333;
+            padding: 4px 8px;
+            border: 2px solid #667eea;
+            border-radius: 3px;
+            font-family: inherit;
+            font-size: 12px;
+            flex: 1;
+            outline: none;
         }
         .field-answer-actions {
             display: flex;
-            gap: 6px;
-            margin-top: 4px;
+            gap: 4px;
+            align-items: center;
         }
         .field-answer-btn {
-            padding: 3px 8px;
-            font-size: 10px;
-            border: 1px solid #ddd;
-            border-radius: 2px;
-            background: white;
-            color: #666;
+            width: 20px;
+            height: 20px;
+            padding: 0;
+            font-size: 14px;
+            border: none;
+            border-radius: 3px;
+            background: transparent;
+            color: #999;
             cursor: pointer;
             transition: all 0.2s;
-            flex: 1;
-            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
         }
-        .field-answer-btn:hover {
-            background: #f0f0f0;
-            border-color: #999;
+        .field-answer-btn.check {
+            color: #4caf50;
+        }
+        .field-answer-btn.check:hover {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        .field-answer-btn.delete {
+            color: #f44336;
         }
         .field-answer-btn.delete:hover {
             background: #ffebee;
-            border-color: #c62828;
             color: #c62828;
-        }
-        .field-answer-edit-form {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            margin-top: 6px;
-        }
-        .field-answer-edit-textarea {
-            width: 100%;
-            min-height: 60px;
-            padding: 6px;
-            font-size: 11px;
-            border: 1px solid #ddd;
-            border-radius: 2px;
-            font-family: monospace;
-            box-sizing: border-box;
-            resize: vertical;
-        }
-        .field-answer-edit-buttons {
-            display: flex;
-            gap: 6px;
-        }
-        .field-answer-edit-buttons button {
-            flex: 1;
-            padding: 4px;
-            font-size: 10px;
-            border: 1px solid #ddd;
-            border-radius: 2px;
-            background: white;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .field-answer-edit-buttons button.save {
-            background: #667eea;
-            color: white;
-            border-color: #667eea;
-        }
-        .field-answer-edit-buttons button.save:hover {
-            background: #764ba2;
-        }
-        .field-answer-edit-buttons button.cancel {
-            background: #f5f5f5;
-            color: #666;
-        }
-        .field-answer-edit-buttons button.cancel:hover {
-            background: #e0e0e0;
         }
         .no-answers {
             padding: 12px;
@@ -423,20 +441,104 @@
         .tab-content.active {
             display: block;
         }
+        .company-name-display {
+            background: #f0f4ff;
+            border: 1px solid #667eea;
+            border-radius: 4px;
+            padding: 8px 12px;
+            margin-bottom: 12px;
+            font-size: 13px;
+            color: #333;
+            display: none;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .company-name-display.visible {
+            display: flex;
+        }
+        .company-info-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .company-name-label {
+            font-weight: 600;
+            color: #667eea;
+        }
+        .company-name-value {
+            font-weight: 500;
+            color: #333;
+            flex: 1;
+        }
+        .glassdoor-rating {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: #666;
+        }
+        .glassdoor-rating a {
+            color: #0caa41;
+            text-decoration: none;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .glassdoor-rating a:hover {
+            text-decoration: underline;
+        }
+        .rating-star {
+            color: #f59e0b;
+        }
+        .rating-loading {
+            color: #999;
+            font-style: italic;
+        }
+        .company-status-indicator {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-left: auto;
+        }
+        .company-status-indicator.new {
+            background: #4caf50;
+            box-shadow: 0 0 4px rgba(76, 175, 80, 0.5);
+        }
+        .company-status-indicator.applied {
+            background: #f44336;
+            box-shadow: 0 0 4px rgba(244, 67, 54, 0.5);
+        }
+        .company-status-indicator.checking {
+            background: #9e9e9e;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>📋 Resume RAG</h1>
 
+        <div id="companyNameDisplay" class="company-name-display">
+            <div class="company-info-row">
+                <span class="company-name-label">Detected company:</span>
+                <span id="companyNameValue" class="company-name-value"></span>
+                <span id="companyStatusIndicator" class="company-status-indicator checking" title="Checking..."></span>
+            </div>
+            <div id="glassdoorRating" class="glassdoor-rating" style="display: none;">
+                <span class="rating-loading">Loading Glassdoor rating...</span>
+            </div>
+        </div>
+
         <div id="serverError" class="server-error" style="display:none;">
-            <h3>⚠️ Server Not Responding</h3>
-            <p>The Resume RAG server is not reachable.</p>
-            <p>To get started:</p>
-            <p style="margin-left: 12px; font-size: 11px;">
-                1. Start the server:<br>
-                <code>uvicorn app.main:app --reload</code>
-            </p>
+            <h3>⚠️ Backend Offline</h3>
+            <p>Start the server:</p>
+            <code class="startup-command">cd ~/code/jesseolsen/rag && source venv/bin/activate && uvicorn app.main:app --reload</code>
             <p style="margin-top: 8px;">
                 <a id="serverLink" href="http://localhost:8000" target="_blank">Check server status →</a>
             </p>
