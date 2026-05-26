@@ -196,20 +196,25 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 // Helper function to extract job title from page
 function extractJobTitle() {
-    console.log('[RESUME_RAG] Extracting job title');
+    console.log('[RESUME_RAG] Extracting job title from:', window.location.href);
 
     // Look for common patterns in headings
     const headings = document.querySelectorAll('h1, h2, h3');
+    console.log('[RESUME_RAG] Found', headings.length, 'headings to check');
+
     for (const heading of headings) {
         const text = heading.textContent?.trim();
         if (text && text.length > 5 && text.length < 150) {
+            console.log('[RESUME_RAG] Checking heading:', text.substring(0, 50));
             // Check if it looks like a job title (contains job-related words)
-            const jobKeywords = /engineer|developer|designer|manager|analyst|specialist|coordinator|director|lead|senior|junior|architect|scientist|administrator|consultant/i;
+            const jobKeywords = /engineer|developer|designer|manager|analyst|specialist|coordinator|director|lead|senior|junior|architect|scientist|administrator|consultant|ai|software|data|product/i;
             if (jobKeywords.test(text)) {
                 // Make sure it's not the company name or other metadata
-                if (!/glassdoor|linkedin|indeed|apply|careers|jobs|welcome/i.test(text)) {
-                    console.log('[RESUME_RAG] Job title from heading:', text);
+                if (!/glassdoor|linkedin|indeed|apply now|careers|jobs|welcome|notifications/i.test(text)) {
+                    console.log('[RESUME_RAG] ✓ Job title from heading:', text);
                     return text;
+                } else {
+                    console.log('[RESUME_RAG] Rejected (matches exclusion):', text.substring(0, 50));
                 }
             }
         }
@@ -217,22 +222,24 @@ function extractJobTitle() {
 
     // Try page title
     const title = document.title;
+    console.log('[RESUME_RAG] Page title:', title);
     if (title) {
         // Extract job title from patterns like "Job Title - Company" or "Job Title | Company"
         const parts = title.split(/[\|\-–—]/);
         if (parts.length > 1) {
-            const jobKeywords = /engineer|developer|designer|manager|analyst|specialist|coordinator|director|lead|senior|junior|architect|scientist|administrator|consultant/i;
+            const jobKeywords = /engineer|developer|designer|manager|analyst|specialist|coordinator|director|lead|senior|junior|architect|scientist|administrator|consultant|ai|software|data|product/i;
 
             // Check first part (usually job title)
             const firstPart = parts[0].trim();
+            console.log('[RESUME_RAG] Checking page title first part:', firstPart);
             if (jobKeywords.test(firstPart) && firstPart.length > 5 && firstPart.length < 150) {
-                console.log('[RESUME_RAG] Job title from page title:', firstPart);
+                console.log('[RESUME_RAG] ✓ Job title from page title:', firstPart);
                 return firstPart;
             }
         }
     }
 
-    console.log('[RESUME_RAG] No job title found');
+    console.log('[RESUME_RAG] ⚠️ No job title found');
     return null;
 }
 
@@ -305,13 +312,14 @@ function extractJobId() {
             console.log('[RESUME_RAG] Job ID from JobRight URL:', jobId);
             return jobId;
         }
-        // Also check for jr_id parameter
-        const paramMatch = url.match(/[?&]jr_id=([^&]+)/);
-        if (paramMatch) {
-            jobId = paramMatch[1];
-            console.log('[RESUME_RAG] Job ID from JobRight jr_id:', jobId);
-            return jobId;
-        }
+    }
+
+    // 6b. Check for jr_id parameter (used by many job boards)
+    const jrIdMatch = url.match(/[?&]jr_id=([^&]+)/);
+    if (jrIdMatch) {
+        jobId = jrIdMatch[1];
+        console.log('[RESUME_RAG] Job ID from jr_id parameter:', jobId);
+        return jobId;
     }
 
     // 7. Generic: Look for common ID patterns in URL
@@ -354,6 +362,65 @@ function extractCompanyName() {
     const url = window.location.href;
     const pathname = window.location.pathname;
     const hostname = window.location.hostname;
+
+    // Special handling for LinkedIn job pages
+    if (hostname.includes('linkedin.com') && pathname.includes('/jobs/view/')) {
+        console.log('[RESUME_RAG] Extracting from LinkedIn job page');
+
+        // Method 1: Look for company name in job-details-jobs-unified-top-card (main job card)
+        const topCard = document.querySelector('.job-details-jobs-unified-top-card__company-name');
+        if (topCard) {
+            const text = topCard.textContent?.trim();
+            if (text && text.length > 1) {
+                console.log('[RESUME_RAG] Company from LinkedIn top card:', text);
+                return text;
+            }
+        }
+
+        // Method 2: Company name link near job title
+        const companyLinks = document.querySelectorAll('a[href*="/company/"]');
+        console.log('[RESUME_RAG] Found', companyLinks.length, 'company links');
+        for (const link of companyLinks) {
+            const text = link.textContent?.trim();
+            console.log('[RESUME_RAG] Checking company link:', text);
+            // Strict filtering: reject UI elements, numbers, and common text
+            if (text && text.length > 2 && text.length < 50 &&
+                !/^\d+/.test(text) &&  // Reject if starts with number
+                !/notification|message|home|jobs|network|search|sign|apply|save|easy|promoted|reviewing|applicant/i.test(text)) {
+                console.log('[RESUME_RAG] ✓ Company from LinkedIn company link:', text);
+                return text;
+            }
+        }
+
+        // Method 3: Look for the company logo image alt text
+        const companyLogo = document.querySelector('img[alt*="logo"], img[alt*="Logo"]');
+        if (companyLogo) {
+            const altText = companyLogo.alt;
+            // Extract company name from "CompanyName logo"
+            const match = altText.match(/^(.+?)\s+[Ll]ogo$/);
+            if (match) {
+                console.log('[RESUME_RAG] Company from LinkedIn logo alt:', match[1]);
+                return match[1];
+            }
+        }
+
+        console.log('[RESUME_RAG] LinkedIn-specific extraction failed, falling back to generic');
+    }
+
+    // Special handling for Greenhouse embed URLs - extract from 'for' parameter
+    if (hostname.includes('greenhouse.io') && url.includes('/embed/')) {
+        const forMatch = url.match(/[?&]for=([^&]+)/);
+        if (forMatch) {
+            const companySlug = forMatch[1];
+            // Convert slug to proper name: "smartsheet" -> "Smartsheet"
+            const companyName = companySlug
+                .split(/[-_]/)
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                .join(' ');
+            console.log('[RESUME_RAG] Company from Greenhouse embed URL:', companyName);
+            return companyName;
+        }
+    }
 
     // Special handling for Glassdoor pages - extract from URL or page title
     if (hostname.includes('glassdoor.com')) {
@@ -404,11 +471,29 @@ function extractCompanyName() {
         }
     }
 
-    // 2. Meta tags (but avoid platform providers like "Manatal", "Greenhouse", etc.)
+    // 2. Look for "About [Company]" sections (common on job boards)
+    const aboutHeadings = document.querySelectorAll('h1, h2, h3, h4, div, span, strong');
+    for (const elem of aboutHeadings) {
+        const text = elem.textContent?.trim();
+        if (text && text.length > 5 && text.length < 100) {
+            // Match patterns like "About Planet DDS", "About [Company Name]"
+            const aboutMatch = text.match(/^About\s+(.+?)$/i);
+            if (aboutMatch) {
+                const companyName = aboutMatch[1].trim();
+                // Make sure it's not generic text
+                if (!/company|us|our team|this|the|job|position/i.test(companyName)) {
+                    console.log('[RESUME_RAG] Company from About section:', companyName);
+                    return companyName;
+                }
+            }
+        }
+    }
+
+    // 3. Meta tags (but avoid platform providers like "Manatal", "Greenhouse", etc.)
     const ogSiteName = document.querySelector('meta[property="og:site_name"]')?.content;
     if (ogSiteName && ogSiteName.length > 2 && ogSiteName.length < 100) {
         // Skip if it's a known job platform provider
-        if (!/manatal|greenhouse|lever|workday|taleo|jobvite|icims|smartrecruiters/i.test(ogSiteName)) {
+        if (!/manatal|greenhouse|lever|workday|taleo|jobvite|icims|smartrecruiters|primepay/i.test(ogSiteName)) {
             return ogSiteName;
         }
     }
@@ -418,10 +503,16 @@ function extractCompanyName() {
     for (const heading of headings) {
         const text = heading.textContent?.trim();
         if (text && text.length > 2 && text.length < 100) {
-            // Skip if it contains job-related words, job titles, or is too generic
-            const jobTitlePattern = /job|career|application|apply|hiring|position|welcome|openings|engineer|developer|designer|manager|analyst|specialist|coordinator|director|lead|senior|junior|intern|consultant|architect|scientist|technician|administrator|assistant|associate|officer|representative|agent|executive/i;
+            // CRITICAL: Immediately reject text starting with numbers (like "0 notifications")
+            if (/^\d/.test(text)) {
+                console.log('[RESUME_RAG] Skipping heading starting with number:', text);
+                continue;
+            }
 
-            if (!jobTitlePattern.test(text)) {
+            // Skip if it contains job-related words, job titles, UI text, or is too generic
+            const skipPattern = /job|career|application|apply|hiring|position|welcome|openings|engineer|developer|designer|manager|analyst|specialist|coordinator|director|lead|senior|junior|intern|consultant|architect|scientist|technician|administrator|assistant|associate|officer|representative|agent|executive|notification|message|alert|update|home|search/i;
+
+            if (!skipPattern.test(text)) {
                 // Clean up the text (remove extra commas, spaces, etc.)
                 const cleaned = text.replace(/,\s*$/, '').trim();
                 if (cleaned && !/^(the|a|an)\s/i.test(cleaned)) {
@@ -465,11 +556,25 @@ function extractCompanyName() {
     }
 
     // 6. Check hostname as fallback (hostname already declared at top of function)
+    // Skip hostname extraction for job board platforms
+    if (/recruit\.com|jobvite\.com|icims\.com|taleo\.net|workday\.com|greenhouse\.io|lever\.co/i.test(hostname)) {
+        console.log('[RESUME_RAG] ⚠️ Could not extract company name from job board page');
+        return null;
+    }
+
     const domain = hostname.replace(/^(www\.|jobs\.|careers\.)/, '');
     const companyFromDomain = domain.split('.')[0];
 
+    // Reject if it looks like a subdomain with weird formatting (multiple hyphens, "llc", etc.)
+    if (/-.*-/.test(companyFromDomain) || /buyer|seller|llc|inc|corp/i.test(companyFromDomain)) {
+        console.log('[RESUME_RAG] ⚠️ Rejected suspicious domain-based company name:', companyFromDomain);
+        return null;
+    }
+
     // Capitalize first letter
-    return companyFromDomain.charAt(0).toUpperCase() + companyFromDomain.slice(1);
+    const result = companyFromDomain.charAt(0).toUpperCase() + companyFromDomain.slice(1);
+    console.log('[RESUME_RAG] Company from hostname fallback:', result);
+    return result;
 }
 
 // Helper function to track job application in Google Sheets
@@ -854,6 +959,39 @@ async function preFillTextareasFromSavedAnswers(backendUrl) {
                         const bestMatch = matches[0];
                         console.log('[RESUME_RAG] Found matching answer with score', bestMatch.score);
 
+                        // Skip if field already has user-entered content
+                        if (textarea.value && textarea.value.trim().length > 0) {
+                            console.log('[RESUME_RAG] Skipping already-filled field');
+                            continue;
+                        }
+
+                        // Validate answer is appropriate for question type
+                        const answerText = bestMatch.answer_text.toLowerCase().trim();
+                        const questionLower = questionText.toLowerCase();
+
+                        // Check for incompatible question/answer pairs
+                        let isIncompatible = false;
+
+                        // Transgender/gender identity questions should only get Yes/No answers
+                        if (questionLower.includes('transgender') || questionLower.includes('gender identity')) {
+                            const validAnswers = ['yes', 'no', 'prefer not', 'decline'];
+                            if (!validAnswers.some(valid => answerText.includes(valid))) {
+                                console.log('[RESUME_RAG] Skipping incompatible answer for transgender question:', answerText);
+                                isIncompatible = true;
+                            }
+                        }
+
+                        // Race/ethnicity questions should not get Yes/No answers
+                        if ((questionLower.includes('race') || questionLower.includes('ethnicity')) &&
+                            (answerText === 'yes' || answerText === 'no')) {
+                            console.log('[RESUME_RAG] Skipping incompatible Yes/No answer for race question');
+                            isIncompatible = true;
+                        }
+
+                        if (isIncompatible) {
+                            continue;
+                        }
+
                         // Fill the textarea
                         textarea.value = bestMatch.answer_text;
                         textarea.dispatchEvent(new Event('input', { bubbles: true }));
@@ -902,6 +1040,39 @@ async function preFillTextareasFromSavedAnswers(backendUrl) {
                     if (matches.length > 0) {
                         const bestMatch = matches[0];
                         console.log('[RESUME_RAG] Found select answer:', bestMatch.answer_text, 'score:', bestMatch.score);
+
+                        // Skip if field already has a user-selected value (not the default/placeholder option)
+                        if (select.selectedIndex > 0 && select.value && select.value.trim().length > 0) {
+                            console.log('[RESUME_RAG] Skipping already-selected dropdown');
+                            continue;
+                        }
+
+                        // Validate answer is appropriate for question type
+                        const answerText = bestMatch.answer_text.toLowerCase().trim();
+                        const questionLower = questionText.toLowerCase();
+
+                        // Check for incompatible question/answer pairs
+                        let isIncompatible = false;
+
+                        // Transgender/gender identity questions should only get Yes/No answers
+                        if (questionLower.includes('transgender') || questionLower.includes('gender identity')) {
+                            const validAnswers = ['yes', 'no', 'prefer not', 'decline'];
+                            if (!validAnswers.some(valid => answerText.includes(valid))) {
+                                console.log('[RESUME_RAG] Skipping incompatible answer for transgender question:', answerText);
+                                isIncompatible = true;
+                            }
+                        }
+
+                        // Race/ethnicity questions should not get Yes/No answers
+                        if ((questionLower.includes('race') || questionLower.includes('ethnicity')) &&
+                            (answerText === 'yes' || answerText === 'no')) {
+                            console.log('[RESUME_RAG] Skipping incompatible Yes/No answer for race question');
+                            isIncompatible = true;
+                        }
+
+                        if (isIncompatible) {
+                            continue;
+                        }
 
                         // Try to find and select the matching option
                         for (const option of select.options || []) {
@@ -981,9 +1152,46 @@ async function preFillTextareasFromSavedAnswers(backendUrl) {
                         const bestMatch = matches[0];
                         const answerValue = bestMatch.answer_text.trim();
 
+                        // Validate answer is appropriate for question type
+                        const answerLower = answerValue.toLowerCase();
+                        const questionLower = questionText.toLowerCase();
+
+                        // Validate this is actually a Yes/No type answer
+                        const isYesNoAnswer = answerLower === 'yes' || answerLower === 'no' ||
+                                            answerLower.includes('prefer not') || answerLower.includes('decline');
+
+                        if (!isYesNoAnswer) {
+                            console.log('[RESUME_RAG] Skipping non-Yes/No answer for Yes/No question:', answerValue);
+                            continue;
+                        }
+
+                        // Additional validation: race/ethnicity answers should not be used for Yes/No questions
+                        const raceAnswers = ['white', 'black', 'asian', 'hispanic', 'latino', 'native american', 'pacific islander'];
+                        if (raceAnswers.some(race => answerLower.includes(race))) {
+                            console.log('[RESUME_RAG] Skipping race answer for Yes/No question:', answerValue);
+                            continue;
+                        }
+
                         // Find and click the appropriate Yes or No button
                         let targetButton = null;
                         const buttons = elem.querySelectorAll('button, [role="button"], div[role="button"]');
+
+                        // Check if any button is already selected/active
+                        let alreadySelected = false;
+                        for (const btn of buttons) {
+                            if (btn.classList.contains('selected') ||
+                                btn.classList.contains('active') ||
+                                btn.getAttribute('aria-pressed') === 'true' ||
+                                btn.getAttribute('data-selected') === 'true') {
+                                alreadySelected = true;
+                                break;
+                            }
+                        }
+
+                        if (alreadySelected) {
+                            console.log('[RESUME_RAG] Skipping already-selected Yes/No field');
+                            continue;
+                        }
 
                         for (const btn of buttons) {
                             const btnText = btn.textContent?.trim() || '';
@@ -1027,12 +1235,12 @@ async function handleDropdowns(data, backendUrl) {
     let processedCount = 0;
 
     // Wait for comboboxes to appear in DOM (form may load asynchronously)
-    let inputs = document.querySelectorAll('input[role="combobox"]');
+    let inputs = Array.from(document.querySelectorAll('input[role="combobox"]'));
     if (inputs.length === 0) {
         console.log('[RESUME_RAG] Waiting for form fields to load...');
         for (let i = 0; i < 30; i++) {
             await sleep(100);
-            inputs = document.querySelectorAll('input[role="combobox"]');
+            inputs = Array.from(document.querySelectorAll('input[role="combobox"]'));
             if (inputs.length > 0) {
                 console.log('[RESUME_RAG] Form fields found after', i * 100, 'ms');
                 break;
@@ -1164,6 +1372,12 @@ async function handleDropdowns(data, backendUrl) {
 
         const targetValue = config.value;
         const source = config.source;
+
+        // Skip if field already has user-entered content
+        if (input.value && input.value.trim().length > 0) {
+            console.log('[RESUME_RAG] Skipping already-filled combobox:', fieldId);
+            continue;
+        }
 
         console.log('[RESUME_RAG] Dropdown: ' + fieldId + ' -> ' + targetValue + ' (from ' + source + ')');
 
@@ -2052,55 +2266,38 @@ function detectGlassdoorPage() {
         return null;
     }
 
-    // Check if we're on an Overview, Reviews, or Search results page
+    // ONLY allow Overview or Reviews pages, NOT search results
     const isOverviewPage = url.includes('/Overview/Working-at-') || url.includes('/Reviews/');
-    const isSearchPage = url.includes('/Search/results.htm');
 
-    if (!isOverviewPage && !isSearchPage) {
+    if (!isOverviewPage) {
+        console.log('[RESUME_RAG] Skipping Glassdoor page - not a company overview/reviews page');
         return null;
     }
 
-    console.log('[RESUME_RAG] Detected Glassdoor page:', isSearchPage ? 'search results' : 'company page');
+    console.log('[RESUME_RAG] Detected Glassdoor company page');
 
     // Extract company name from the page
     let companyName = null;
 
-    // For search results pages, extract from URL parameter
-    if (isSearchPage) {
-        const urlParams = new URLSearchParams(window.location.search);
-        const keyword = urlParams.get('keyword');
-        if (keyword) {
-            // Clean up the keyword (remove quotes, "results", etc.)
-            companyName = keyword
-                .replace(/^["']|["']$/g, '')  // Remove surrounding quotes
-                .replace(/\s+results?$/i, '') // Remove " results" suffix
-                .trim();
-            console.log('[RESUME_RAG] Company from search keyword:', companyName);
+    // Method 1: From page title
+    const titleMatch = document.title.match(/(.+?)\s+(?:Overview|Reviews)/i);
+    if (titleMatch) {
+        companyName = titleMatch[1].trim();
+    }
+
+    // Method 2: From h1 heading
+    if (!companyName) {
+        const h1 = document.querySelector('h1');
+        if (h1) {
+            companyName = h1.textContent.trim();
         }
     }
 
-    // For overview/reviews pages
+    // Method 3: From URL
     if (!companyName) {
-        // Method 1: From page title
-        const titleMatch = document.title.match(/(.+?)\s+(?:Overview|Reviews)/i);
-        if (titleMatch) {
-            companyName = titleMatch[1].trim();
-        }
-
-        // Method 2: From h1 heading
-        if (!companyName) {
-            const h1 = document.querySelector('h1');
-            if (h1) {
-                companyName = h1.textContent.trim();
-            }
-        }
-
-        // Method 3: From URL
-        if (!companyName) {
-            const urlMatch = url.match(/Working-at-(.+?)-EI_/);
-            if (urlMatch) {
-                companyName = urlMatch[1].replace(/-/g, ' ');
-            }
+        const urlMatch = url.match(/Working-at-(.+?)-EI_/);
+        if (urlMatch) {
+            companyName = urlMatch[1].replace(/-/g, ' ');
         }
     }
 
@@ -2110,32 +2307,9 @@ function detectGlassdoorPage() {
         return null;
     }
 
-    // Extract rating and review count
+    // Extract rating and review count from company overview/reviews page
     let rating = null;
     let reviewCount = null;
-
-    // For search results pages, extract from company card
-    if (isSearchPage && companyName) {
-        // Look for the company card in search results
-        const pageText = document.body.textContent;
-
-        // Try to find rating next to company name (e.g., "Panopto 3.9★")
-        const ratingPattern = new RegExp(companyName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s+(\\d+\\.\\d+)\\s*★', 'i');
-        const ratingMatch = pageText.match(ratingPattern);
-        if (ratingMatch) {
-            rating = parseFloat(ratingMatch[1]);
-            console.log('[RESUME_RAG] Found rating in search results:', rating);
-        }
-
-        // Try to find review count (e.g., "128 reviews")
-        // Look for pattern near the company name
-        const reviewPattern = /(\\d+)\\s*reviews?/i;
-        const reviewMatch = pageText.match(reviewPattern);
-        if (reviewMatch) {
-            reviewCount = parseInt(reviewMatch[1]);
-            console.log('[RESUME_RAG] Found review count in search results:', reviewCount);
-        }
-    }
 
     // Method 1: Look for JSON-LD structured data
     const scriptTags = document.querySelectorAll('script[type="application/ld+json"]');
@@ -2191,6 +2365,7 @@ function detectGlassdoorPage() {
     let recommendPct = null;
     let ceoPct = null;
     let medianPay = null;
+    let employeeCount = null;
 
     if (isOverviewPage) {
         const pageText = document.body.textContent;
@@ -2251,10 +2426,36 @@ function detectGlassdoorPage() {
             }
         }
 
-        // Method 4: Try to find stats in structured elements
+        // Method 4: Extract employee count
+        // Look for patterns like "51-200 employees" or "10,000+ employees" or "Size 1001 to 5000 Employees"
+        const employeePatterns = [
+            /([\d,]+)\s*(?:to|[-–])\s*([\d,]+)\s*(?:employees?|Employees?)/i,
+            /([\d,]+)\+?\s*(?:employees?|Employees?)/i,
+            /Size[\s:]*(\d+)\s*to\s*(\d+)/i,
+            /(\d+)\s*[-–]\s*(\d+)\s*employees?/i
+        ];
+        for (const pattern of employeePatterns) {
+            const match = pageText.match(pattern);
+            if (match) {
+                if (match[2]) {
+                    // Range format (e.g., "51-200" or "1 to 50")
+                    employeeCount = `${match[1]}-${match[2]}`;
+                } else {
+                    // Single number or "10,000+" format
+                    employeeCount = match[1];
+                    if (pageText.includes(match[1] + '+')) {
+                        employeeCount += '+';
+                    }
+                }
+                console.log('[RESUME_RAG] Found employee count:', employeeCount);
+                break;
+            }
+        }
+
+        // Method 5: Try to find stats in structured elements
         // Look for common Glassdoor class names and data attributes
-        if (!recommendPct || !ceoPct || !medianPay) {
-            const statElements = document.querySelectorAll('[data-test*="rating"], [class*="Rating"], [class*="stat"]');
+        if (!recommendPct || !ceoPct || !medianPay || !employeeCount) {
+            const statElements = document.querySelectorAll('[data-test*="rating"], [class*="Rating"], [class*="stat"], [class*="employer"]');
             for (const elem of statElements) {
                 const text = elem.textContent || '';
 
@@ -2284,6 +2485,19 @@ function detectGlassdoorPage() {
                         console.log('[RESUME_RAG] Found median pay in element:', medianPay);
                     }
                 }
+
+                if (!employeeCount && /employee|size/i.test(text)) {
+                    const match = text.match(/([\d,]+)\s*(?:to|[-–])\s*([\d,]+)|(\d+)\+?\s*employees?/i);
+                    if (match) {
+                        if (match[1] && match[2]) {
+                            employeeCount = `${match[1]}-${match[2]}`;
+                        } else if (match[3]) {
+                            employeeCount = match[3];
+                            if (text.includes('+')) employeeCount += '+';
+                        }
+                        console.log('[RESUME_RAG] Found employee count in element:', employeeCount);
+                    }
+                }
             }
         }
     }
@@ -2310,6 +2524,9 @@ function detectGlassdoorPage() {
     if (medianPay !== null) {
         glassdoorData.medianPay = medianPay;
     }
+    if (employeeCount !== null) {
+        glassdoorData.employeeCount = employeeCount;
+    }
 
     // Log what we found
     console.log('[RESUME_RAG] Glassdoor data extracted:', {
@@ -2318,7 +2535,8 @@ function detectGlassdoorPage() {
         reviewCount: reviewCount,
         recommendPct: recommendPct,
         ceoPct: ceoPct,
-        medianPay: medianPay
+        medianPay: medianPay,
+        employeeCount: employeeCount
     });
 
     return glassdoorData;
@@ -2378,6 +2596,9 @@ function showGlassdoorUpdateNotification(glassdoorData) {
     const stats = [`★ ${glassdoorData.rating}`];
     if (glassdoorData.recommendPct) {
         stats.push(`${glassdoorData.recommendPct}% recommend`);
+    }
+    if (glassdoorData.employeeCount) {
+        stats.push(`${glassdoorData.employeeCount} employees`);
     }
     if (glassdoorData.ceoPct) {
         stats.push(`${glassdoorData.ceoPct}% CEO`);
@@ -2452,3 +2673,264 @@ if (window.location.hostname.includes('glassdoor.com')) {
         subtree: true
     });
 }
+
+// ============================================================================
+// APPLY BUTTON DETECTION - Track when user submits application
+// ============================================================================
+
+let applicationSubmitted = false;
+
+function detectApplyButtonClick(event) {
+    // Prevent duplicate submissions
+    if (applicationSubmitted) {
+        console.log('[RESUME_RAG] Application already submitted, ignoring');
+        return;
+    }
+
+    const target = event.target;
+    const buttonText = target.textContent?.toLowerCase() || '';
+    const buttonType = target.type?.toLowerCase() || '';
+    const buttonRole = target.getAttribute('role') || '';
+
+    // Check if this looks like an Apply/Submit button
+    const isApplyButton =
+        /apply|submit|send\s*application|continue\s*to|finish|complete/i.test(buttonText) &&
+        !(/save|cancel|back|previous|edit|delete/i.test(buttonText));
+
+    const isSubmitButton = buttonType === 'submit';
+
+    if (isApplyButton || isSubmitButton) {
+        console.log('[RESUME_RAG] Apply/Submit button clicked:', buttonText);
+
+        // Get company and job info
+        const companyName = extractCompanyName();
+        const jobId = extractJobId();
+        const jobTitle = extractJobTitle();
+        const jobUrl = window.location.href;
+
+        if (companyName) {
+            console.log('[RESUME_RAG] Recording application submission for:', companyName);
+            applicationSubmitted = true;
+
+            // Send to backend to update Applied Date
+            chrome.storage.sync.get('backendUrl', async (result) => {
+                const backendUrl = result.backendUrl || 'http://localhost:8000';
+
+                try {
+                    const response = await fetch(`${backendUrl}/api/v1/tracking/job-application`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            company_name: companyName,
+                            job_url: jobUrl,
+                            job_title: jobTitle,
+                            job_id: jobId,
+                            date_applied: new Date().toISOString().split('T')[0] // YYYY-MM-DD
+                        })
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        console.log('[RESUME_RAG] ✓ Application recorded:', data.message);
+
+                        // Show notification
+                        chrome.runtime.sendMessage({
+                            type: 'APPLICATION_SUBMITTED',
+                            company: companyName,
+                            jobTitle: jobTitle
+                        });
+                    } else {
+                        console.log('[RESUME_RAG] Failed to record application:', response.status);
+                    }
+                } catch (error) {
+                    console.log('[RESUME_RAG] Error recording application:', error);
+                }
+            });
+        }
+    }
+}
+
+// Listen for clicks on all buttons and form submissions
+document.addEventListener('click', detectApplyButtonClick, true);
+
+// Also listen for form submissions
+document.addEventListener('submit', (event) => {
+    console.log('[RESUME_RAG] Form submitted');
+    // Trigger the same logic as clicking Apply
+    detectApplyButtonClick({ target: event.target });
+}, true);
+
+console.log('[RESUME_RAG] Apply button detection active');
+
+// ============================================================================
+// REJECTION DETECTION (provider-agnostic)
+// ============================================================================
+// Scans visible page text for rejection language. When matched, extracts
+// company + job title from the surrounding text and POSTs to
+// /api/v1/tracking/mark-rejected. The spreadsheet is the filter: if the
+// extracted company isn't there, the backend returns updated:false and nothing
+// happens. Works on any email provider, web client, or even a forwarded email
+// viewed inline anywhere.
+
+const REJECTION_PATTERNS = [
+    /decided\s+to\s+(?:move|go|proceed|pursue)\s+(?:ahead|forward)?\s*(?:with)?\s*other\s+(?:candidates|applicants)/i,
+    /(?:moving|going)\s+(?:ahead|forward)\s+with\s+other\s+(?:candidates|applicants)/i,
+    /we\s+(?:will\s+not|won['’]t|are\s+unable\s+to)\s+(?:be\s+)?(?:moving\s+forward|progressing|advancing)/i,
+    /your\s+application\s+(?:has\s+been|was)\s+(?:not\s+successful|unsuccessful|declined)/i,
+    /not\s+(?:be\s+)?(?:moving\s+forward|progressing)\s+with\s+your\s+(?:application|candidacy)/i,
+    /we\s+(?:have\s+)?(?:decided|chosen)\s+not\s+to\s+(?:move\s+forward|proceed)/i,
+    /regret\s+to\s+inform\s+you/i,
+    /pursue\s+(?:other|another)\s+candidate/i,
+    /(?:better|stronger)\s+match\s+for\s+(?:the|this)\s+(?:role|position)/i,
+];
+
+const processedRejectionContent = new Set();
+let rejectionScanTimer = null;
+
+function extractCompanyFromText(pageText) {
+    const candidates = [];
+
+    // "application to/at/for/with <Company>"
+    const appMatch = pageText.match(/application\s+(?:to|at|for|with)\s+([A-Z][\w&.,'\- ]{1,60}?)(?:\s*[.\n,!?]|\s+(?:has|was|is|for)\b)/);
+    if (appMatch) candidates.push(appMatch[1].trim());
+
+    // "interest in [the X at] Y"
+    const interestMatch = pageText.match(/interest\s+in\s+(?:the\s+[^.\n]+?\s+at\s+)?([A-Z][\w&.,'\- ]{1,60}?)[\s.\n,]/);
+    if (interestMatch) candidates.push(interestMatch[1].trim());
+
+    // "the X at <Company>" (job-title + company pattern)
+    const atMatch = pageText.match(/\bat\s+([A-Z][\w&.,'\- ]{1,60}?)(?:\s*[.\n,]|\s+(?:is|are|we|team)\b)/);
+    if (atMatch) candidates.push(atMatch[1].trim());
+
+    // "from the <Company> team"
+    const fromMatch = pageText.match(/from\s+(?:the\s+)?([A-Z][\w&.,'\- ]{1,60}?)\s+(?:team|recruiting|talent|hr)/i);
+    if (fromMatch) candidates.push(fromMatch[1].trim());
+
+    // "Thank you for your interest in <Company>"
+    const thanksMatch = pageText.match(/thank\s+you\s+for\s+(?:your\s+)?(?:interest|applying|application)\s+(?:in|to|at|with)\s+([A-Z][\w&.,'\- ]{1,60}?)[\s.\n,]/i);
+    if (thanksMatch) candidates.push(thanksMatch[1].trim());
+
+    for (const c of candidates) {
+        const cleaned = c
+            .replace(/\s*(corporate\s+careers?|careers?|recruiting|talent\s+team|hr|team)\s*$/i, '')
+            .replace(/,?\s*(inc\.?|llc|ltd\.?|corp\.?)\s*$/i, '')
+            .trim();
+        if (cleaned && cleaned.length >= 2) return cleaned;
+    }
+    return null;
+}
+
+function extractJobTitleFromText(pageText) {
+    const patterns = [
+        /(?:for|in)\s+the\s+([A-Z][\w\- ,/&]{2,80}?)\s+(?:position|role|opportunity|opening)/,
+        /(?:for|in)\s+the\s+([A-Z][\w\- ,/&]{2,80}?)\s+at\s+[A-Z]/,
+        /interest\s+in\s+the\s+([A-Z][\w\- ,/&]{2,80}?)\s+at\s+/i,
+        /application\s+(?:to|for)\s+the\s+([A-Z][\w\- ,/&]{2,80}?)\s+(?:position|role|at)/i,
+        /applied\s+for\s+(?:the\s+)?([A-Z][\w\- ,/&]{2,80}?)\s+(?:position|role|at)/i,
+    ];
+    for (const p of patterns) {
+        const m = pageText.match(p);
+        if (m) return m[1].trim();
+    }
+    return null;
+}
+
+async function sendRejectionToBackend(companyName, jobTitle) {
+    try {
+        const payload = { companyName: companyName };
+        if (jobTitle) payload.jobTitle = jobTitle;
+
+        console.log('[RESUME_RAG] Sending rejection to backend:', payload);
+        const response = await apiRequest(
+            `${window.RESUME_RAG_BACKEND_URL}/api/v1/tracking/mark-rejected`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            }
+        );
+        const result = await response.json();
+        console.log('[RESUME_RAG] Rejection update result:', result);
+        if (result.updated) {
+            showRejectionNotification(companyName, result.job_title || jobTitle, result.rejection_date);
+        }
+        return result;
+    } catch (err) {
+        console.log('[RESUME_RAG] Error sending rejection:', err.message);
+        return { updated: false, error: err.message };
+    }
+}
+
+function showRejectionNotification(companyName, jobTitle, date) {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #b71c1c;
+        color: white;
+        padding: 12px 20px;
+        border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 999999;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 14px;
+        animation: slideIn 0.3s ease-out;
+        max-width: 360px;
+    `;
+    notification.innerHTML = `
+        <div style="font-weight: 600; margin-bottom: 4px;">✗ Rejection recorded: ${companyName}</div>
+        <div style="font-size: 12px; opacity: 0.9;">${jobTitle ? jobTitle + ' • ' : ''}${date || 'today'}</div>
+    `;
+    document.body.appendChild(notification);
+    setTimeout(() => {
+        notification.style.animation = 'slideOut 0.3s ease-out';
+        setTimeout(() => notification.remove(), 300);
+    }, 4000);
+}
+
+function scanPageForRejection() {
+    if (!document.body) return;
+    const pageText = document.body.innerText || '';
+    if (!pageText || pageText.length < 50) return;
+
+    // Find the first matching rejection pattern
+    let matchedPattern = null;
+    for (const p of REJECTION_PATTERNS) {
+        if (p.test(pageText)) { matchedPattern = p; break; }
+    }
+    if (!matchedPattern) return;
+
+    // Dedupe per URL + first 200 chars of visible text
+    const dedupeKey = window.location.href + '::' + pageText.slice(0, 200);
+    if (processedRejectionContent.has(dedupeKey)) return;
+    processedRejectionContent.add(dedupeKey);
+
+    const company = extractCompanyFromText(pageText);
+    if (!company) {
+        console.log('[RESUME_RAG] Rejection language matched but could not extract company');
+        return;
+    }
+    const jobTitle = extractJobTitleFromText(pageText);
+    console.log('[RESUME_RAG] Rejection detected:', { company, jobTitle });
+    sendRejectionToBackend(company, jobTitle);
+}
+
+const rejectionObserver = new MutationObserver(() => {
+    if (rejectionScanTimer) clearTimeout(rejectionScanTimer);
+    rejectionScanTimer = setTimeout(scanPageForRejection, 1000);
+});
+
+function startRejectionScanning() {
+    rejectionObserver.observe(document.body, { childList: true, subtree: true });
+    setTimeout(scanPageForRejection, 1500);
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', startRejectionScanning);
+} else {
+    startRejectionScanning();
+}
+console.log('[RESUME_RAG] Rejection detection active');

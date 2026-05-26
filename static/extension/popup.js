@@ -9,6 +9,9 @@ const DEFAULT_BACKEND_URL = 'http://localhost:8000';
 let backendUrl = DEFAULT_BACKEND_URL;
 const BACKEND_START_COMMAND = 'cd ~/code/jesseolsen/rag && source venv/bin/activate && uvicorn app.main:app --reload';
 
+// Track if company check is in progress to prevent duplicate calls
+let companyCheckInProgress = false;
+
 function getServerErrorHtml(error) {
     // Check if it's a network/connection error
     if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
@@ -134,7 +137,9 @@ async function loadCompanyName() {
             const statusData = await checkCompanyStatus(
                 response.companyName,
                 response.jobId,
-                statusIndicator
+                statusIndicator,
+                response.jobTitle,
+                tab.url  // Current tab URL
             );
 
             // Load Glassdoor rating (will use cached if available, otherwise fetch)
@@ -149,12 +154,46 @@ async function loadCompanyName() {
     }
 }
 
-async function checkCompanyStatus(companyName, jobId, statusIndicator) {
+async function checkCompanyStatus(companyName, jobId, statusIndicator, jobTitle, jobUrl) {
+    // Prevent duplicate simultaneous calls
+    if (companyCheckInProgress) {
+        console.log('[POPUP] Company check already in progress, skipping duplicate call');
+        return { cachedRating: null, cachedReviewCount: null };
+    }
+
+    // Check if this exact job was recently checked (within last 60 seconds)
+    if (jobId) {
+        const storageKey = `lastChecked_${companyName}_${jobId}`;
+        try {
+            const result = await chrome.storage.local.get(storageKey);
+            const lastChecked = result[storageKey];
+            if (lastChecked && (Date.now() - lastChecked) < 60000) {
+                console.log('[POPUP] Job recently checked, skipping duplicate:', companyName, jobId);
+                return { cachedRating: null, cachedReviewCount: null };
+            }
+        } catch (e) {
+            console.log('[POPUP] Error checking storage:', e);
+        }
+    }
+
+    companyCheckInProgress = true;
+
     try {
-        // Auto-add job to spreadsheet if it doesn't exist
-        let url = `${backendUrl}/api/v1/tracking/check-company?company_name=${encodeURIComponent(companyName)}&auto_add=true`;
+        // Glassdoor company/overview pages are for research, not job applications — don't create a row
+        const isGlassdoorCompanyPage = jobUrl && (
+            jobUrl.includes('glassdoor.com/Overview/') ||
+            jobUrl.includes('glassdoor.com/Reviews/')
+        );
+        // Check company/job status (will auto-add with full details if new)
+        let url = `${backendUrl}/api/v1/tracking/check-company?company_name=${encodeURIComponent(companyName)}&auto_add=${!isGlassdoorCompanyPage}`;
         if (jobId) {
             url += `&job_id=${encodeURIComponent(jobId)}`;
+        }
+        if (jobTitle) {
+            url += `&job_title=${encodeURIComponent(jobTitle)}`;
+        }
+        if (jobUrl) {
+            url += `&job_url=${encodeURIComponent(jobUrl)}`;
         }
 
         const response = await fetch(url);
@@ -247,6 +286,16 @@ async function checkCompanyStatus(companyName, jobId, statusIndicator) {
             updateExtensionBadge('new');
         }
 
+        // Store timestamp to prevent duplicate checks
+        if (jobId) {
+            const storageKey = `lastChecked_${companyName}_${jobId}`;
+            try {
+                await chrome.storage.local.set({ [storageKey]: Date.now() });
+            } catch (e) {
+                console.log('[POPUP] Error saving to storage:', e);
+            }
+        }
+
         // Return cached Glassdoor data if available
         return {
             cachedRating: data.cached_rating,
@@ -273,6 +322,9 @@ async function checkCompanyStatus(companyName, jobId, statusIndicator) {
         serverError.style.display = 'block';
 
         return { cachedRating: null, cachedReviewCount: null };
+    } finally {
+        // Always reset the flag when done
+        companyCheckInProgress = false;
     }
 }
 
