@@ -197,6 +197,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // Helper function to extract job title from page
 function extractJobTitle() {
     console.log('[RESUME_RAG] Extracting job title from:', window.location.href);
+    const hostname = window.location.hostname;
+
+    // Robert Half page titles: "Job Title Job in City, ST | Robert Half"
+    if (hostname.includes('roberthalf.com')) {
+        const rhMatch = document.title.match(/^(.+?)\s+Job\s+in\s+.+?\s*\|/i);
+        if (rhMatch) {
+            console.log('[RESUME_RAG] ✓ Job title from Robert Half page title:', rhMatch[1].trim());
+            return rhMatch[1].trim();
+        }
+    }
 
     // Look for common patterns in headings
     const headings = document.querySelectorAll('h1, h2, h3');
@@ -314,6 +324,16 @@ function extractJobId() {
         }
     }
 
+    // 7. Robert Half: roberthalf.com/us/en/job/{city}/{title-slug}/{job-id}
+    if (hostname.includes('roberthalf.com')) {
+        const match = pathname.match(/\/job\/[^\/]+\/[^\/]+\/([^\/\?]+)/);
+        if (match) {
+            jobId = match[1];
+            console.log('[RESUME_RAG] Job ID from Robert Half URL:', jobId);
+            return jobId;
+        }
+    }
+
     // 6b. Check for jr_id parameter (used by many job boards)
     const jrIdMatch = url.match(/[?&]jr_id=([^&]+)/);
     if (jrIdMatch) {
@@ -420,6 +440,12 @@ function extractCompanyName() {
             console.log('[RESUME_RAG] Company from Greenhouse embed URL:', companyName);
             return companyName;
         }
+    }
+
+    // Robert Half: client company is confidential — track under "Robert Half"
+    if (hostname.includes('roberthalf.com')) {
+        console.log('[RESUME_RAG] Robert Half job page — client company not disclosed, using "Robert Half"');
+        return 'Robert Half';
     }
 
     // Special handling for Glassdoor pages - extract from URL or page title
