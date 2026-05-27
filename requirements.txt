@@ -16,6 +16,12 @@ anthropic>=0.25.0
 
 # PDF Processing
 pypdf2>=3.0.0
+pymupdf>=1.23.0
+
+# Text Processing
+tiktoken>=0.5.0
+sentence-transformers>=2.2.0
+numpy<2  # torch 2.2.x requires NumPy 1.x on x86 macOS
 
 # Environment and Configuration
 python-dotenv>=1.0.0
