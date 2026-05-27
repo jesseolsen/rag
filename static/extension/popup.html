@@ -544,14 +544,7 @@
             </div>
         </div>
 
-        <div id="serverError" class="server-error" style="display:none;">
-            <h3>⚠️ Backend Offline</h3>
-            <p>Start the server:</p>
-            <code class="startup-command">cd ~/code/jesseolsen/rag && source venv/bin/activate && uvicorn app.main:app --reload</code>
-            <p style="margin-top: 8px;">
-                <a id="serverLink" href="http://localhost:8000" target="_blank">Check server status →</a>
-            </p>
-        </div>
+        <div id="errorsContainer"></div>
 
         <div class="tab-buttons">
             <button class="tab-btn active" data-tab="resumes">Resumes</button>

@@ -12,6 +12,24 @@ const BACKEND_START_COMMAND = 'cd ~/code/jesseolsen/resume-rag-mcp && source ven
 // Track if company check is in progress to prevent duplicate calls
 let companyCheckInProgress = false;
 
+function showError(id, html, isWarning = false) {
+    const container = document.getElementById('errorsContainer');
+    let el = document.getElementById('error-' + id);
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'error-' + id;
+        container.appendChild(el);
+    }
+    el.className = isWarning ? 'server-warning' : 'server-error';
+    el.innerHTML = html;
+    el.style.display = 'block';
+}
+
+function clearError(id) {
+    const el = document.getElementById('error-' + id);
+    if (el) el.style.display = 'none';
+}
+
 function getServerErrorHtml(error) {
     // Check if it's a network/connection error
     if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
@@ -71,24 +89,19 @@ function saveBackendUrl(url) {
 }
 
 async function checkServerConnection() {
-    const serverError = document.getElementById('serverError');
-    const serverLink = document.getElementById('serverLink');
     const uploadStatus = document.getElementById('uploadStatus');
-
-    // Always hide upload status on check (clear any cached state)
     uploadStatus.style.display = 'none';
 
     try {
         const response = await fetch(`${backendUrl}/health`, { timeout: 3000 });
         if (response.ok) {
-            serverError.style.display = 'none';
+            clearError('connection');
             return true;
         } else {
             throw new Error('Server returned error');
         }
     } catch (error) {
-        serverError.style.display = 'block';
-        serverLink.href = backendUrl;
+        showError('connection', getServerErrorHtml(error));
         return false;
     }
 }
@@ -209,7 +222,6 @@ async function checkCompanyStatus(companyName, jobId, statusIndicator, jobTitle,
             updateExtensionBadge(null);
 
             // Show helpful error message
-            const serverError = document.getElementById('serverError');
             let errorHtml = '<h3>⚠️ Company Check Failed</h3>';
 
             if (response.status === 400) {
@@ -237,8 +249,7 @@ async function checkCompanyStatus(companyName, jobId, statusIndicator, jobTitle,
                 errorHtml += '<p><strong>Fix:</strong> Restart backend with latest code</p>';
             }
 
-            serverError.innerHTML = errorHtml;
-            serverError.style.display = 'block';
+            showError('sheets', errorHtml);
 
             return { cachedRating: null, cachedReviewCount: null };
         }
@@ -251,13 +262,11 @@ async function checkCompanyStatus(companyName, jobId, statusIndicator, jobTitle,
             statusIndicator.style.display = 'none';
             updateExtensionBadge(null);
 
-            const serverError = document.getElementById('serverError');
             const msg = data.message || '';
 
             if (msg.includes('not configured') || msg.includes('not set')) {
                 // Env vars genuinely missing — show full setup instructions
-                serverError.className = 'server-error';
-                serverError.innerHTML = `
+                showError('sheets', `
                     <h3>⚠️ Google Sheets Not Configured</h3>
                     <p><strong>Fix:</strong></p>
                     <ol style="margin: 4px 0; padding-left: 20px; font-size: 12px; line-height: 1.6;">
@@ -265,21 +274,17 @@ async function checkCompanyStatus(companyName, jobId, statusIndicator, jobTitle,
                         <li>Set GOOGLE_SHEETS_CREDENTIALS_FILE to your service account JSON path</li>
                         <li>Restart the backend</li>
                     </ol>
-                `;
+                `);
             } else {
                 // Env vars set but service failed to init — just prompt a restart
-                serverError.className = 'server-warning';
-                serverError.innerHTML = `⚠️ Google Sheets unavailable — restart the backend to reconnect.
-                    <br><code style="display:inline;background:none;border:none;padding:0;font-size:11px;color:inherit;">${BACKEND_START_COMMAND}</code>`;
+                showError('sheets', `⚠️ Google Sheets unavailable — restart the backend to reconnect.
+                    <br><code style="display:inline;background:none;border:none;padding:0;font-size:11px;color:inherit;">${BACKEND_START_COMMAND}</code>`, true);
             }
-            serverError.style.display = 'block';
 
             return { cachedRating: null, cachedReviewCount: null };
         }
 
-        // Clear any previous errors
-        const serverError = document.getElementById('serverError');
-        serverError.style.display = 'none';
+        clearError('sheets');
 
         // Update indicator based on duplicate job status (not just company existence)
         statusIndicator.classList.remove('checking');
@@ -321,9 +326,7 @@ async function checkCompanyStatus(companyName, jobId, statusIndicator, jobTitle,
         statusIndicator.style.display = 'none';
         updateExtensionBadge(null);
 
-        // Show network error with fix instructions
-        const serverError = document.getElementById('serverError');
-        serverError.innerHTML = `
+        showError('sheets', `
             <h3>⚠️ Connection Error</h3>
             <p><strong>Error:</strong> ${error.message}</p>
             <p><strong>Fix:</strong></p>
@@ -332,8 +335,7 @@ async function checkCompanyStatus(companyName, jobId, statusIndicator, jobTitle,
                 <li>Start backend: <code>${BACKEND_START_COMMAND}</code></li>
                 <li>Check browser console (F12) for details</li>
             </ul>
-        `;
-        serverError.style.display = 'block';
+        `);
 
         return { cachedRating: null, cachedReviewCount: null };
     } finally {
@@ -495,10 +497,7 @@ async function loadResumes() {
         renderResumeList();
     } catch (error) {
         console.error('[POPUP] Error loading resumes:', error);
-        // Show error in the top serverError div (consolidated error display)
-        const serverError = document.getElementById('serverError');
-        serverError.innerHTML = getServerErrorHtml(error);
-        serverError.style.display = 'block';
+        showError('load', getServerErrorHtml(error));
     }
 }
 
@@ -678,7 +677,6 @@ async function handleResumeUpload(e) {
         uploadStatus.style.display = 'none';
 
         // Show detailed upload error with fix instructions
-        const serverError = document.getElementById('serverError');
         let errorHtml = '<h3>⚠️ Resume Upload Failed</h3>';
         errorHtml += `<p><strong>Error:</strong> ${error.message}</p>`;
         errorHtml += '<p><strong>Fix:</strong></p><ul style="margin: 4px 0; padding-left: 20px; font-size: 12px;">';
@@ -701,8 +699,7 @@ async function handleResumeUpload(e) {
         }
 
         errorHtml += '</ul>';
-        serverError.innerHTML = errorHtml;
-        serverError.style.display = 'block';
+        showError('upload', errorHtml);
     }
 
     // Reset file input
@@ -728,7 +725,6 @@ async function fillForm() {
         // Get resume data
         const response = await fetch(`${backendUrl}/api/v1/resume/${selectedResume.id}/data`);
         if (!response.ok) {
-            const serverError = document.getElementById('serverError');
             let errorHtml = '<h3>⚠️ Failed to Load Resume</h3>';
 
             if (response.status === 400) {
@@ -757,17 +753,13 @@ async function fillForm() {
                 errorHtml += '<p><strong>Fix:</strong> Check backend logs and restart server</p>';
             }
 
-            serverError.innerHTML = errorHtml;
-            serverError.style.display = 'block';
+            showError('fill', errorHtml);
             status.style.display = 'none';
             return;
         }
 
         const resumeData = await response.json();
-
-        // Clear any previous errors
-        const serverError = document.getElementById('serverError');
-        serverError.style.display = 'none';
+        clearError('fill');
 
         // Send to content script
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -815,9 +807,7 @@ async function fillForm() {
     } catch (error) {
         console.error('[POPUP] Fill form error:', error);
 
-        // Show detailed error with fix instructions
-        const serverError = document.getElementById('serverError');
-        serverError.innerHTML = `
+        showError('fill', `
             <h3>⚠️ Form Fill Failed</h3>
             <p><strong>Error:</strong> ${error.message}</p>
             <p><strong>Fix:</strong></p>
@@ -827,8 +817,7 @@ async function fillForm() {
                 <li>Refresh the job application page</li>
                 <li>Check browser console (F12) for details</li>
             </ul>
-        `;
-        serverError.style.display = 'block';
+        `);
         status.style.display = 'none';
     }
 }
