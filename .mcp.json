@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "job-tracker": {
+      "command": "/Users/jesseolsen/code/jesseolsen/rag/venv/bin/python",
+      "args": ["/Users/jesseolsen/code/jesseolsen/rag/mcp_server.py"],
+      "cwd": "/Users/jesseolsen/code/jesseolsen/rag"
+    }
+  }
+}

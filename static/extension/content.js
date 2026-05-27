@@ -197,6 +197,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // Helper function to extract job title from page
 function extractJobTitle() {
     console.log('[RESUME_RAG] Extracting job title from:', window.location.href);
+    const hostname = window.location.hostname;
+
+    // Robert Half page titles: "Job Title Job in City, ST | Robert Half"
+    if (hostname.includes('roberthalf.com')) {
+        const rhMatch = document.title.match(/^(.+?)\s+Job\s+in\s+.+?\s*\|/i);
+        if (rhMatch) {
+            console.log('[RESUME_RAG] ✓ Job title from Robert Half page title:', rhMatch[1].trim());
+            return rhMatch[1].trim();
+        }
+    }
 
     // Look for common patterns in headings
     const headings = document.querySelectorAll('h1, h2, h3');
@@ -210,7 +220,7 @@ function extractJobTitle() {
             const jobKeywords = /engineer|developer|designer|manager|analyst|specialist|coordinator|director|lead|senior|junior|architect|scientist|administrator|consultant|ai|software|data|product/i;
             if (jobKeywords.test(text)) {
                 // Make sure it's not the company name or other metadata
-                if (!/glassdoor|linkedin|indeed|apply now|careers|jobs|welcome|notifications/i.test(text)) {
+                if (!/glassdoor|linkedin|indeed|apply now|careers|jobs|welcome|notifications|do not sell|personal data|privacy|cookie|terms of/i.test(text)) {
                     console.log('[RESUME_RAG] ✓ Job title from heading:', text);
                     return text;
                 } else {
@@ -310,6 +320,16 @@ function extractJobId() {
         if (match) {
             jobId = match[1];
             console.log('[RESUME_RAG] Job ID from JobRight URL:', jobId);
+            return jobId;
+        }
+    }
+
+    // 7. Robert Half: roberthalf.com/us/en/job/{city}/{title-slug}/{job-id}
+    if (hostname.includes('roberthalf.com')) {
+        const match = pathname.match(/\/job\/[^\/]+\/[^\/]+\/([^\/\?]+)/);
+        if (match) {
+            jobId = match[1];
+            console.log('[RESUME_RAG] Job ID from Robert Half URL:', jobId);
             return jobId;
         }
     }
@@ -422,6 +442,16 @@ function extractCompanyName() {
         }
     }
 
+    // Robert Half: client company is confidential — track under "Robert Half"
+    // Only trigger on actual job listing pages (/job/ in path), not homepage/search
+    if (hostname.includes('roberthalf.com')) {
+        if (pathname.includes('/job/')) {
+            console.log('[RESUME_RAG] Robert Half job listing — using "Robert Half" as company');
+            return 'Robert Half';
+        }
+        return null;
+    }
+
     // Special handling for Glassdoor pages - extract from URL or page title
     if (hostname.includes('glassdoor.com')) {
         // Salary page: /Salary/Company-Job-Salaries-EXXXX_D_KOstart,end.htm
@@ -458,6 +488,37 @@ function extractCompanyName() {
         }
     }
 
+    // Workday job pages: *.myworkdayjobs.com or *.workday.com
+    if (hostname.includes('myworkdayjobs.com') || hostname.includes('.workday.com')) {
+        // Try page title: "AI Product Engineer - Guidewire Careers" or "Guidewire Careers"
+        const titleCareerMatch = document.title.match(/(?:^|[\|\-–—]\s*)([A-Z][^|\-–—]+?)\s+Careers?\s*(?:$|[\|\-–—])/);
+        if (titleCareerMatch) {
+            const name = titleCareerMatch[1].trim();
+            console.log('[RESUME_RAG] Company from Workday title:', name);
+            return name;
+        }
+        // Try visible "XYZ Careers" text in nav/header/h1
+        for (const el of document.querySelectorAll('h1, nav, header, [class*="navbar"], [class*="header"]')) {
+            const text = el.textContent?.trim();
+            const m = text && text.match(/^([A-Z][^\n\r]{1,50}?)\s+Careers?\b/m);
+            if (m) {
+                const name = m[1].trim();
+                if (name.length >= 2 && name.length <= 60) {
+                    console.log('[RESUME_RAG] Company from Workday page element:', name);
+                    return name;
+                }
+            }
+        }
+        // Fall back to subdomain: guidewire.wd5.myworkdayjobs.com → "Guidewire"
+        const subMatch = hostname.match(/^([^.]+)\./);
+        if (subMatch && !/^(www|jobs|careers)$/i.test(subMatch[1])) {
+            const name = subMatch[1].charAt(0).toUpperCase() + subMatch[1].slice(1);
+            console.log('[RESUME_RAG] Company from Workday subdomain:', name);
+            return name;
+        }
+        return null;
+    }
+
     // Pattern 1: /company-name/job or /company-name/apply (standard)
     let pathMatch = pathname.match(/^\/([^\/]+)\/(jobs?|apply|careers|positions?)/i);
 
@@ -467,7 +528,9 @@ function extractCompanyName() {
     }
 
     // Pattern 3: Generic /company-name/... on job boards
-    if (!pathMatch && (hostname.includes('jobs.') || hostname.includes('careers.'))) {
+    // Exclude myworkdayjobs.com which contains "jobs." as a substring but is handled above
+    if (!pathMatch && !hostname.includes('myworkdayjobs') &&
+        (hostname.includes('jobs.') || hostname.includes('careers.'))) {
         pathMatch = pathname.match(/^\/([^\/]+)\//);
     }
 
@@ -571,7 +634,7 @@ function extractCompanyName() {
 
     // 6. Check hostname as fallback (hostname already declared at top of function)
     // Skip hostname extraction for job board platforms
-    if (/recruit\.com|jobvite\.com|icims\.com|taleo\.net|workday\.com|greenhouse\.io|lever\.co/i.test(hostname)) {
+    if (/recruit\.com|jobvite\.com|icims\.com|taleo\.net|workday\.com|myworkdayjobs\.com|greenhouse\.io|lever\.co/i.test(hostname)) {
         console.log('[RESUME_RAG] ⚠️ Could not extract company name from job board page');
         return null;
     }
@@ -2974,25 +3037,36 @@ function scanPageForRejection() {
     const pageText = document.body.innerText || '';
     if (!pageText || pageText.length < 50) return;
 
-    // Find the first matching rejection pattern
-    let matchedPattern = null;
+    // Find the position of the first matching rejection pattern
+    let matchIndex = -1;
     for (const p of REJECTION_PATTERNS) {
-        if (p.test(pageText)) { matchedPattern = p; break; }
+        // Use a fresh regex to get the index via exec()
+        const re = new RegExp(p.source, p.flags);
+        const m = re.exec(pageText);
+        if (m) { matchIndex = m.index; break; }
     }
-    if (!matchedPattern) return;
+    if (matchIndex === -1) return;
+
+    // Only look for company/title within 1 200 chars of the rejection language.
+    // This prevents email-list false positives where rejection text in one email
+    // and a company name in a completely different email are combined.
+    const WINDOW = 1200;
+    const contextStart = Math.max(0, matchIndex - WINDOW);
+    const contextEnd   = Math.min(pageText.length, matchIndex + WINDOW);
+    const contextText  = pageText.slice(contextStart, contextEnd);
 
     // Dedupe per URL + first 200 chars of visible text
     const dedupeKey = window.location.href + '::' + pageText.slice(0, 200);
     if (processedRejectionContent.has(dedupeKey)) return;
     processedRejectionContent.add(dedupeKey);
 
-    const company = extractCompanyFromText(pageText);
+    const company = extractCompanyFromText(contextText);
     if (!company) {
-        console.log('[RESUME_RAG] Rejection language matched but could not extract company');
+        console.log('[RESUME_RAG] Rejection language matched but could not extract company within context window');
         return;
     }
-    const jobTitle = extractJobTitleFromText(pageText);
-    console.log('[RESUME_RAG] Rejection detected:', { company, jobTitle });
+    const jobTitle = extractJobTitleFromText(contextText);
+    console.log('[RESUME_RAG] Rejection detected:', { company, jobTitle, matchIndex });
     sendRejectionToBackend(company, jobTitle);
 }
 
