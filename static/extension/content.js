@@ -488,6 +488,37 @@ function extractCompanyName() {
         }
     }
 
+    // Workday job pages: *.myworkdayjobs.com or *.workday.com
+    if (hostname.includes('myworkdayjobs.com') || hostname.includes('.workday.com')) {
+        // Try page title: "AI Product Engineer - Guidewire Careers" or "Guidewire Careers"
+        const titleCareerMatch = document.title.match(/(?:^|[\|\-–—]\s*)([A-Z][^|\-–—]+?)\s+Careers?\s*(?:$|[\|\-–—])/);
+        if (titleCareerMatch) {
+            const name = titleCareerMatch[1].trim();
+            console.log('[RESUME_RAG] Company from Workday title:', name);
+            return name;
+        }
+        // Try visible "XYZ Careers" text in nav/header/h1
+        for (const el of document.querySelectorAll('h1, nav, header, [class*="navbar"], [class*="header"]')) {
+            const text = el.textContent?.trim();
+            const m = text && text.match(/^([A-Z][^\n\r]{1,50}?)\s+Careers?\b/m);
+            if (m) {
+                const name = m[1].trim();
+                if (name.length >= 2 && name.length <= 60) {
+                    console.log('[RESUME_RAG] Company from Workday page element:', name);
+                    return name;
+                }
+            }
+        }
+        // Fall back to subdomain: guidewire.wd5.myworkdayjobs.com → "Guidewire"
+        const subMatch = hostname.match(/^([^.]+)\./);
+        if (subMatch && !/^(www|jobs|careers)$/i.test(subMatch[1])) {
+            const name = subMatch[1].charAt(0).toUpperCase() + subMatch[1].slice(1);
+            console.log('[RESUME_RAG] Company from Workday subdomain:', name);
+            return name;
+        }
+        return null;
+    }
+
     // Pattern 1: /company-name/job or /company-name/apply (standard)
     let pathMatch = pathname.match(/^\/([^\/]+)\/(jobs?|apply|careers|positions?)/i);
 
@@ -497,7 +528,9 @@ function extractCompanyName() {
     }
 
     // Pattern 3: Generic /company-name/... on job boards
-    if (!pathMatch && (hostname.includes('jobs.') || hostname.includes('careers.'))) {
+    // Exclude myworkdayjobs.com which contains "jobs." as a substring but is handled above
+    if (!pathMatch && !hostname.includes('myworkdayjobs') &&
+        (hostname.includes('jobs.') || hostname.includes('careers.'))) {
         pathMatch = pathname.match(/^\/([^\/]+)\//);
     }
 
@@ -601,7 +634,7 @@ function extractCompanyName() {
 
     // 6. Check hostname as fallback (hostname already declared at top of function)
     // Skip hostname extraction for job board platforms
-    if (/recruit\.com|jobvite\.com|icims\.com|taleo\.net|workday\.com|greenhouse\.io|lever\.co/i.test(hostname)) {
+    if (/recruit\.com|jobvite\.com|icims\.com|taleo\.net|workday\.com|myworkdayjobs\.com|greenhouse\.io|lever\.co/i.test(hostname)) {
         console.log('[RESUME_RAG] ⚠️ Could not extract company name from job board page');
         return null;
     }
