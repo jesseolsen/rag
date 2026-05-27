@@ -1476,13 +1476,21 @@ class GoogleSheetsService:
 
 # Global service instance
 _sheets_service: Optional[GoogleSheetsService] = None
+_sheets_service_last_attempt: float = 0.0
+_SHEETS_RETRY_INTERVAL = 30.0  # seconds between re-init attempts after failure
 
 
 def get_sheets_service() -> Optional[GoogleSheetsService]:
     """Get or create the global Google Sheets service instance."""
-    global _sheets_service
+    global _sheets_service, _sheets_service_last_attempt
+    import time
 
-    if _sheets_service is None or _sheets_service.service is None:
+    if _sheets_service is not None and _sheets_service.service is not None:
+        return _sheets_service
+
+    now = time.monotonic()
+    if _sheets_service is None or (now - _sheets_service_last_attempt) >= _SHEETS_RETRY_INTERVAL:
+        _sheets_service_last_attempt = now
         _sheets_service = GoogleSheetsService()
 
     return _sheets_service if _sheets_service.service else None
