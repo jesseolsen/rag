@@ -251,18 +251,27 @@ async function checkCompanyStatus(companyName, jobId, statusIndicator, jobTitle,
             statusIndicator.style.display = 'none';
             updateExtensionBadge(null);
 
-            // Show configuration instructions
             const serverError = document.getElementById('serverError');
-            serverError.innerHTML = `
-                <h3>⚠️ Google Sheets Not Configured</h3>
-                <p><strong>Fix:</strong></p>
-                <ol style="margin: 4px 0; padding-left: 20px; font-size: 12px; line-height: 1.6;">
-                    <li>Set GOOGLE_SPREADSHEET env variable to your spreadsheet URL</li>
-                    <li>Set GOOGLE_SHEETS_CREDENTIALS_FILE to your service account JSON path</li>
-                    <li>Restart the backend</li>
-                </ol>
-                <p style="font-size: 11px; margin-top: 6px;">Message: ${data.message || 'Integration not enabled'}</p>
-            `;
+            const msg = data.message || '';
+
+            if (msg.includes('not configured') || msg.includes('not set')) {
+                // Env vars genuinely missing — show full setup instructions
+                serverError.className = 'server-error';
+                serverError.innerHTML = `
+                    <h3>⚠️ Google Sheets Not Configured</h3>
+                    <p><strong>Fix:</strong></p>
+                    <ol style="margin: 4px 0; padding-left: 20px; font-size: 12px; line-height: 1.6;">
+                        <li>Set GOOGLE_SPREADSHEET env variable to your spreadsheet URL</li>
+                        <li>Set GOOGLE_SHEETS_CREDENTIALS_FILE to your service account JSON path</li>
+                        <li>Restart the backend</li>
+                    </ol>
+                `;
+            } else {
+                // Env vars set but service failed to init — just prompt a restart
+                serverError.className = 'server-warning';
+                serverError.innerHTML = `⚠️ Google Sheets unavailable — restart the backend to reconnect.
+                    <br><code style="display:inline;background:none;border:none;padding:0;font-size:11px;color:inherit;">${BACKEND_START_COMMAND}</code>`;
+            }
             serverError.style.display = 'block';
 
             return { cachedRating: null, cachedReviewCount: null };
