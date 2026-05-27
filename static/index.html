@@ -228,10 +228,94 @@
             color: #2e7d32;
             margin-bottom: 8px;
         }
+
+        .server-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: white;
+            padding: 12px 16px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            font-size: 0.95rem;
+        }
+
+        .status-light {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status-light.online {
+            background: #4caf50;
+        }
+
+        .status-light.offline {
+            background: #cccccc;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .server-status.offline {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+        }
+
+        .server-status-text {
+            color: #333;
+        }
+
+        .server-status.offline .server-status-text {
+            color: #856404;
+        }
+
+        .startup-instructions {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .startup-instructions h3 {
+            color: #856404;
+            margin-bottom: 12px;
+            margin-top: 0;
+        }
+
+        .startup-instructions code {
+            background: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-family: monospace;
+            display: inline-block;
+            margin: 8px 0;
+        }
     </style>
 </head>
 <body>
+    <div class="server-status" id="serverStatus">
+        <div class="status-light online" id="statusLight"></div>
+        <div class="server-status-text" id="statusText">Server Online</div>
+    </div>
+
     <div class="container">
+        <div class="startup-instructions" id="startupInstructions">
+            <h3>⚠️ Server is Offline</h3>
+            <p>The backend server is not running. To start the server, run:</p>
+            <code>python -m uvicorn app.main:app --reload</code>
+            <p style="margin-top: 12px; font-size: 0.9rem; color: #856404;">Or if using Docker:</p>
+            <code>docker-compose up</code>
+        </div>
+
         <div class="header">
             <h1>📄 Resume RAG</h1>
             <p>AI-Powered Job Application Assistant</p>
@@ -385,6 +469,44 @@
     <script>
         let currentResumeId = null;
         let currentFilename = null;
+
+        // Check server status
+        async function checkServerStatus() {
+            try {
+                const response = await fetch('/health', { method: 'GET' });
+                const isOnline = response.ok;
+                updateServerStatus(isOnline);
+                return isOnline;
+            } catch (error) {
+                updateServerStatus(false);
+                return false;
+            }
+        }
+
+        function updateServerStatus(isOnline) {
+            const statusElement = document.getElementById('serverStatus');
+            const statusLight = document.getElementById('statusLight');
+            const statusText = document.getElementById('statusText');
+            const instructions = document.getElementById('startupInstructions');
+
+            if (isOnline) {
+                statusLight.className = 'status-light online';
+                statusText.textContent = 'Server Online';
+                statusElement.classList.remove('offline');
+                instructions.style.display = 'none';
+            } else {
+                statusLight.className = 'status-light offline';
+                statusText.textContent = 'Server Offline';
+                statusElement.classList.add('offline');
+                instructions.style.display = 'block';
+            }
+        }
+
+        // Check server status on page load and every 10 seconds
+        window.addEventListener('DOMContentLoaded', () => {
+            checkServerStatus();
+            setInterval(checkServerStatus, 10000);
+        });
 
         // Tab switching with persistence
         function switchTab(tabName) {
