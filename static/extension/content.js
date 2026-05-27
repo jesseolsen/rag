@@ -2854,7 +2854,7 @@ function detectApplyButtonClick(event) {
             applicationSubmitted = true;
 
             // Send to backend to update Applied Date
-            chrome.storage.sync.get('backendUrl', async (result) => {
+            chrome.storage.local.get('backendUrl', async (result) => {
                 const backendUrl = result.backendUrl || 'http://localhost:8000';
 
                 try {
