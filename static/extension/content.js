@@ -3004,25 +3004,36 @@ function scanPageForRejection() {
     const pageText = document.body.innerText || '';
     if (!pageText || pageText.length < 50) return;
 
-    // Find the first matching rejection pattern
-    let matchedPattern = null;
+    // Find the position of the first matching rejection pattern
+    let matchIndex = -1;
     for (const p of REJECTION_PATTERNS) {
-        if (p.test(pageText)) { matchedPattern = p; break; }
+        // Use a fresh regex to get the index via exec()
+        const re = new RegExp(p.source, p.flags);
+        const m = re.exec(pageText);
+        if (m) { matchIndex = m.index; break; }
     }
-    if (!matchedPattern) return;
+    if (matchIndex === -1) return;
+
+    // Only look for company/title within 1 200 chars of the rejection language.
+    // This prevents email-list false positives where rejection text in one email
+    // and a company name in a completely different email are combined.
+    const WINDOW = 1200;
+    const contextStart = Math.max(0, matchIndex - WINDOW);
+    const contextEnd   = Math.min(pageText.length, matchIndex + WINDOW);
+    const contextText  = pageText.slice(contextStart, contextEnd);
 
     // Dedupe per URL + first 200 chars of visible text
     const dedupeKey = window.location.href + '::' + pageText.slice(0, 200);
     if (processedRejectionContent.has(dedupeKey)) return;
     processedRejectionContent.add(dedupeKey);
 
-    const company = extractCompanyFromText(pageText);
+    const company = extractCompanyFromText(contextText);
     if (!company) {
-        console.log('[RESUME_RAG] Rejection language matched but could not extract company');
+        console.log('[RESUME_RAG] Rejection language matched but could not extract company within context window');
         return;
     }
-    const jobTitle = extractJobTitleFromText(pageText);
-    console.log('[RESUME_RAG] Rejection detected:', { company, jobTitle });
+    const jobTitle = extractJobTitleFromText(contextText);
+    console.log('[RESUME_RAG] Rejection detected:', { company, jobTitle, matchIndex });
     sendRejectionToBackend(company, jobTitle);
 }
 
