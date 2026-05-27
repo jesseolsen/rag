@@ -47,6 +47,14 @@ def _extract_hyperlink_text(cell_value: str) -> str:
     return cell_value or ''
 
 
+def _extract_hyperlink_url(cell_value: str) -> str:
+    """Extract the URL from a =HYPERLINK("url", "text") formula, or return ''."""
+    if isinstance(cell_value, str) and cell_value.startswith('=HYPERLINK'):
+        m = re.search(r'=HYPERLINK\("([^"]*)"', cell_value)
+        return m.group(1) if m else ''
+    return ''
+
+
 class GoogleSheetsService:
     """Service for interacting with Google Sheets API."""
 
@@ -1349,6 +1357,96 @@ class GoogleSheetsService:
         except HttpError as e:
             print(f"[GOOGLE_SHEETS] Error consolidating: {e}")
             return {'success': False, 'message': f'Sheets API error: {e}'}
+
+    def get_all_applications(
+        self,
+        spreadsheet_url: str,
+        status: str = "active"
+    ) -> list:
+        """Read all job application rows from the spreadsheet.
+
+        Args:
+            spreadsheet_url: The Google Sheets URL
+            status: "active" (no rejection date), "rejected" (has rejection date), or "all"
+
+        Returns:
+            List of dicts with keys: company, company_url, job_title, job_url,
+            job_id, applied_date, rejection_date, glassdoor_stars, recommend_pct,
+            employee_count, ceo_pct, median_pay
+        """
+        if not self.service:
+            return []
+
+        spreadsheet_id = self.extract_spreadsheet_id(spreadsheet_url)
+        if not spreadsheet_id:
+            return []
+
+        gid = self.extract_gid(spreadsheet_url)
+        sheet_name = self.get_sheet_name_from_gid(spreadsheet_id, gid) if gid else None
+        if not sheet_name:
+            try:
+                spreadsheet = self.service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+                sheets = spreadsheet.get('sheets', [])
+                if not sheets:
+                    return []
+                sheet_name = sheets[0]['properties']['title']
+            except HttpError:
+                return []
+
+        try:
+            result = self.service.spreadsheets().values().get(
+                spreadsheetId=spreadsheet_id,
+                range=f'{sheet_name}!A:K',
+                valueRenderOption='FORMULA',
+            ).execute()
+            values = result.get('values', [])
+        except HttpError:
+            return []
+
+        applications = []
+        for i, row in enumerate(values):
+            if i == 0:
+                # Skip header row (col A is "Company" plain text, not a HYPERLINK)
+                col_a = row[0] if row else ''
+                if isinstance(col_a, str) and not col_a.startswith('=HYPERLINK'):
+                    continue
+
+            if not row:
+                continue
+
+            col_a = row[0] if len(row) > 0 else ''
+            company = _extract_hyperlink_text(col_a)
+            company_url = _extract_hyperlink_url(col_a)
+            if not company:
+                continue
+
+            col_h = row[7] if len(row) > 7 else ''
+            job_title = _extract_hyperlink_text(col_h)
+            job_url = _extract_hyperlink_url(col_h)
+
+            rejection_date = str(row[10] if len(row) > 10 else '').strip()
+
+            if status == "active" and rejection_date:
+                continue
+            if status == "rejected" and not rejection_date:
+                continue
+
+            applications.append({
+                'company': company,
+                'company_url': company_url,
+                'job_title': job_title,
+                'job_url': job_url,
+                'job_id': str(row[8] if len(row) > 8 else '').strip(),
+                'applied_date': str(row[9] if len(row) > 9 else '').strip(),
+                'rejection_date': rejection_date,
+                'glassdoor_stars': _extract_hyperlink_text(row[2] if len(row) > 2 else ''),
+                'recommend_pct': str(row[3] if len(row) > 3 else '').strip(),
+                'employee_count': str(row[4] if len(row) > 4 else '').strip(),
+                'ceo_pct': str(row[5] if len(row) > 5 else '').strip(),
+                'median_pay': str(row[6] if len(row) > 6 else '').strip(),
+            })
+
+        return applications
 
     def _get_sheet_id(self, spreadsheet_id: str, sheet_name: str) -> int:
         """Get the sheet ID (gid) from sheet name.
