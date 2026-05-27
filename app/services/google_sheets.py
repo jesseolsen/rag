@@ -67,9 +67,12 @@ class GoogleSheetsService:
         """
         self.credentials_file = credentials_file or settings.google_sheets_credentials_file
         self.service = None
+        self.init_error: Optional[str] = None
 
         if self.credentials_file and os.path.exists(self.credentials_file):
             self._initialize_service()
+        elif self.credentials_file:
+            self.init_error = f"Credentials file not found: {self.credentials_file}"
 
     def _initialize_service(self):
         """Initialize Google Sheets API service with credentials."""
@@ -81,6 +84,7 @@ class GoogleSheetsService:
             self.service = build('sheets', 'v4', credentials=credentials)
         except Exception as e:
             print(f"[GOOGLE_SHEETS] Failed to initialize service: {e}")
+            self.init_error = str(e)
             self.service = None
 
     def extract_spreadsheet_id(self, url: str) -> Optional[str]:
@@ -1478,7 +1482,7 @@ def get_sheets_service() -> Optional[GoogleSheetsService]:
     """Get or create the global Google Sheets service instance."""
     global _sheets_service
 
-    if _sheets_service is None:
+    if _sheets_service is None or _sheets_service.service is None:
         _sheets_service = GoogleSheetsService()
 
     return _sheets_service if _sheets_service.service else None

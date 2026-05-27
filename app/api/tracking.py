@@ -107,13 +107,19 @@ async def get_tracking_status():
     spreadsheet_url = settings.google_spreadsheet
     credentials_file = settings.google_sheets_credentials_file
 
+    from app.services.google_sheets import _sheets_service
     sheets_service = get_sheets_service()
+
+    init_error = None
+    if _sheets_service is not None and not _sheets_service.service:
+        init_error = getattr(_sheets_service, 'init_error', None)
 
     return {
         "enabled": bool(spreadsheet_url and sheets_service),
         "spreadsheet_configured": bool(spreadsheet_url),
         "credentials_configured": bool(credentials_file and os.path.exists(credentials_file or '')),
         "service_initialized": bool(sheets_service),
+        "init_error": init_error,
         "spreadsheet_url": spreadsheet_url if spreadsheet_url else None
     }
 

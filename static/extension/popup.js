@@ -7,7 +7,7 @@ let draggedElement = null;
 // Default backend URL
 const DEFAULT_BACKEND_URL = 'http://localhost:8000';
 let backendUrl = DEFAULT_BACKEND_URL;
-const BACKEND_START_COMMAND = 'cd ~/code/jesseolsen/rag && source venv/bin/activate && uvicorn app.main:app --reload';
+const BACKEND_START_COMMAND = 'cd ~/code/jesseolsen/resume-rag-mcp && source venv/bin/activate && uvicorn app.main:app --reload';
 
 // Track if company check is in progress to prevent duplicate calls
 let companyCheckInProgress = false;
@@ -27,7 +27,7 @@ function getServerErrorHtml(error) {
         return `<h3>⚠️ Server Error</h3>
                 <p>The backend returned an error. Check the server logs.</p>
                 <p>You may need to initialize the database:</p>
-                <code class="startup-command">cd ~/code/jesseolsen/rag && source venv/bin/activate && python init_db.py</code>`;
+                <code class="startup-command">cd ~/code/jesseolsen/resume-rag-mcp && source venv/bin/activate && python init_db.py</code>`;
     }
 
     if (error.message.includes('404')) {
@@ -55,7 +55,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupEventListeners();
 
     // Load company name from current page
-    await loadCompanyName();
+    await loadCompanyName(serverAvailable);
 });
 
 async function getStoredBackendUrl() {
@@ -93,7 +93,7 @@ async function checkServerConnection() {
     }
 }
 
-async function loadCompanyName() {
+async function loadCompanyName(serverAvailable = true) {
     // Clear badge at the start - will be set again if company is detected
     updateExtensionBadge(null);
 
@@ -130,20 +130,24 @@ async function loadCompanyName() {
                 console.log('[POPUP] Job ID detected:', response.jobId);
             }
 
-            // Set badge to checking while we verify status
-            updateExtensionBadge('checking');
+            if (serverAvailable) {
+                // Set badge to checking while we verify status
+                updateExtensionBadge('checking');
 
-            // Check company/job status (returns cached rating and duplicate status)
-            const statusData = await checkCompanyStatus(
-                response.companyName,
-                response.jobId,
-                statusIndicator,
-                response.jobTitle,
-                tab.url  // Current tab URL
-            );
+                // Check company/job status (returns cached rating and duplicate status)
+                const statusData = await checkCompanyStatus(
+                    response.companyName,
+                    response.jobId,
+                    statusIndicator,
+                    response.jobTitle,
+                    tab.url  // Current tab URL
+                );
 
-            // Load Glassdoor rating (will use cached if available, otherwise fetch)
-            await loadGlassdoorRating(response.companyName, statusData);
+                // Load Glassdoor rating (will use cached if available, otherwise fetch)
+                await loadGlassdoorRating(response.companyName, statusData);
+            } else {
+                updateExtensionBadge(null);
+            }
         } else {
             console.log('[POPUP] No company name detected');
             updateExtensionBadge(null);
