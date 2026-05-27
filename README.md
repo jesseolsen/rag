@@ -4,9 +4,19 @@ A Chrome extension that automatically fills job application forms with your resu
 
 ## Screenshots
 
+Chrome Extension with Resume upload and RAG
+
 <img width="872" height="558" alt="image" src="https://github.com/user-attachments/assets/b8241a16-cbfb-4230-8015-cc62f9d471fd" />
 
 <img width="866" height="860" alt="image" src="https://github.com/user-attachments/assets/e4f62216-66e0-4064-bde0-8440050aa40f" />
+
+MCP support
+
+<img width="406" height="176" alt="image" src="https://github.com/user-attachments/assets/a20a6e71-3683-4f9e-8b1b-31cbd5543a01" />
+
+<img width="2508" height="994" alt="image" src="https://github.com/user-attachments/assets/ac195650-26c7-4632-8123-12a63b27d475" />
+
+<img width="2514" height="798" alt="image" src="https://github.com/user-attachments/assets/4ea3862c-a006-4d82-b815-8d77f8777496" />
 
 ## Quick Start
 
