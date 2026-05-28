@@ -506,9 +506,12 @@ function extractCompanyName() {
             for (const el of elements) {
                 const text = el.textContent?.trim();
                 // Match pattern like "VAS • 4 days ago" or "VAS - 4 days ago"
+                // Also match company names with spaces (e.g., "Citizen Health")
                 const match = text && text.match(/^([A-Z][A-Z0-9\s&.,-]*?)\s*(?:•|-|–—)?\s*\d+\s+(?:days?|hours?|minutes?|weeks?|months?)\s+ago/i);
                 if (match) {
-                    const companyName = match[1].trim();
+                    let companyName = match[1].trim();
+                    // Replace URL-encoded spaces (%20) with actual spaces
+                    companyName = companyName.replace(/%20/g, ' ');
                     console.log('[RESUME_RAG] Company from Jobright.ai:', companyName);
                     return companyName;
                 }
@@ -517,10 +520,13 @@ function extractCompanyName() {
 
         // Fallback: Look for the company section heading or main company text
         const pageText = document.body.textContent || '';
-        const companyMatch = pageText.match(/^([A-Z]{2,10})\s+(?:•|-|–—)?\s*\d+\s+(?:days?|hours?|minutes?|weeks?|months?)\s+ago/m);
+        const companyMatch = pageText.match(/^([A-Z][A-Z0-9\s&.,%\-]*?)\s+(?:•|-|–—)?\s*\d+\s+(?:days?|hours?|minutes?|weeks?|months?)\s+ago/m);
         if (companyMatch) {
-            console.log('[RESUME_RAG] Company from Jobright.ai text:', companyMatch[1]);
-            return companyMatch[1];
+            let companyName = companyMatch[1].trim();
+            // Replace URL-encoded spaces (%20) with actual spaces
+            companyName = companyName.replace(/%20/g, ' ');
+            console.log('[RESUME_RAG] Company from Jobright.ai text:', companyName);
+            return companyName;
         }
     }
 
