@@ -2915,12 +2915,19 @@ function detectApplyButtonClick(event) {
                 const backendUrl = result.backendUrl || 'http://localhost:8000';
 
                 try {
+                    // Get today's date in local timezone (not UTC)
+                    const now = new Date();
+                    const year = now.getFullYear();
+                    const month = String(now.getMonth() + 1).padStart(2, '0');
+                    const day = String(now.getDate()).padStart(2, '0');
+                    const localDate = `${year}-${month}-${day}`;
+
                     const payload = {
                         company_name: companyName,
                         job_url: jobUrl,
                         job_title: jobTitle,
                         job_id: jobId,
-                        date_applied: new Date().toISOString().split('T')[0] // YYYY-MM-DD
+                        date_applied: localDate // YYYY-MM-DD in local timezone
                     };
                     if (jobSalaryRange) {
                         payload.job_salary_range = jobSalaryRange;
