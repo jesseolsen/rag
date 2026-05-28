@@ -184,11 +184,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const companyName = extractCompanyName();
         const jobId = extractJobId();
         const jobTitle = extractJobTitle();
+        const jobSalaryRange = extractJobSalaryRange();
         sendResponse({
             success: true,
             companyName: companyName || null,
             jobId: jobId || null,
-            jobTitle: jobTitle || null
+            jobTitle: jobTitle || null,
+            jobSalaryRange: jobSalaryRange || null
         });
         return true;
     }
@@ -2330,6 +2332,53 @@ async function captureAnswersFromCurrentForm(backendUrl, filledFields) {
 }
 
 // ============================================================================
+// JOB PAY RANGE EXTRACTION
+// ============================================================================
+
+// Extract the job's pay range from the current page (job listing, jobright.ai, etc.)
+function extractJobSalaryRange() {
+    const url = window.location.href;
+
+    // JobRight.ai: /jobs/info/{id} pages
+    if (url.includes('jobright.ai')) {
+        // First try CSS selectors for salary elements
+        const selectors = [
+            '[class*="salary"]', '[class*="pay"]', '[class*="compensation"]',
+            '[data-testid*="salary"]', '[data-qa*="salary"]'
+        ];
+        for (const sel of selectors) {
+            const el = document.querySelector(sel);
+            if (el) {
+                const text = el.textContent.trim();
+                if (text && /\$/.test(text)) {
+                    console.log('[RESUME_RAG] Extracted salary from jobright:', text);
+                    return text;
+                }
+            }
+        }
+
+        // Fallback: scan page text for salary patterns
+        const bodyText = document.body.innerText;
+        const patterns = [
+            /\$([\d,]+[KkMm]?)\s*[-–—]\s*\$([\d,]+[KkMm]?)\s*(?:\/\s*(?:yr|year|mo|month|hr|hour))?/i,
+            /Salary[:\s]+\$([\d,]+[KkMm]?)\s*[-–—]\s*\$([\d,]+[KkMm]?)/i,
+            /(?:pay|compensation)[:\s]+\$([\d,]+[KkMm]?)\s*[-–—]\s*\$([\d,]+[KkMm]?)/i,
+            /\$([\d,]+[KkMm]?)\s*[-–—]\s*\$([\d,]+[KkMm]?)\s*per\s+(?:year|yr|hour|hr)/i,
+        ];
+        for (const pat of patterns) {
+            const m = bodyText.match(pat);
+            if (m) {
+                const result = m[0].trim();
+                console.log('[RESUME_RAG] Extracted salary from jobright (regex):', result);
+                return result;
+            }
+        }
+    }
+
+    return null;
+}
+
+// ============================================================================
 // GLASSDOOR AUTO-UPDATE FEATURE
 // ============================================================================
 
@@ -2853,23 +2902,36 @@ function detectApplyButtonClick(event) {
             console.log('[RESUME_RAG] Recording application submission for:', companyName);
             applicationSubmitted = true;
 
+<<<<<<< HEAD
             // Send to backend to update Applied Date
             chrome.storage.local.get('backendUrl', async (result) => {
+=======
+            // Extract job salary range
+            const jobSalaryRange = extractJobSalaryRange();
+
+            // Send to backend to update Applied Date and other fields
+            chrome.storage.sync.get('backendUrl', async (result) => {
+>>>>>>> 9778180 (Add job salary range column with dynamic column resolution)
                 const backendUrl = result.backendUrl || 'http://localhost:8000';
 
                 try {
+                    const payload = {
+                        company_name: companyName,
+                        job_url: jobUrl,
+                        job_title: jobTitle,
+                        job_id: jobId,
+                        date_applied: new Date().toISOString().split('T')[0] // YYYY-MM-DD
+                    };
+                    if (jobSalaryRange) {
+                        payload.job_salary_range = jobSalaryRange;
+                    }
+
                     const response = await fetch(`${backendUrl}/api/v1/tracking/job-application`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                         },
-                        body: JSON.stringify({
-                            company_name: companyName,
-                            job_url: jobUrl,
-                            job_title: jobTitle,
-                            job_id: jobId,
-                            date_applied: new Date().toISOString().split('T')[0] // YYYY-MM-DD
-                        })
+                        body: JSON.stringify(payload)
                     });
 
                     if (response.ok) {

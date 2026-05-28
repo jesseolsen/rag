@@ -19,6 +19,7 @@ class JobApplicationRequest(BaseModel):
     job_url: str
     job_title: Optional[str] = None
     job_id: Optional[str] = None
+    job_salary_range: Optional[str] = None
     position: Optional[str] = None
     date_applied: Optional[str] = None
     notes: Optional[str] = None
@@ -75,13 +76,14 @@ async def track_job_application(request: JobApplicationRequest):
     if request.notes:
         additional_data['notes'] = request.notes
 
-    # Add to spreadsheet with job title and job ID
+    # Add to spreadsheet with job title, job ID, and salary range
     success = sheets_service.add_job_application(
         spreadsheet_url=spreadsheet_url,
         company_name=request.company_name,
         job_url=request.job_url,
         job_title=request.job_title or request.position,  # Use job_title, fallback to position
         job_id=request.job_id,
+        job_salary_range=request.job_salary_range,
         additional_data=additional_data
     )
 
@@ -130,6 +132,7 @@ async def check_company_exists(
     job_id: Optional[str] = None,
     job_title: Optional[str] = None,
     job_url: Optional[str] = None,
+    job_salary_range: Optional[str] = None,
     auto_add: bool = False
 ):
     """Check if a company/job already exists in the tracking spreadsheet.
@@ -195,6 +198,7 @@ async def check_company_exists(
                 job_url=job_url or "",
                 job_title=job_title,
                 job_id=job_id,
+                job_salary_range=job_salary_range,
                 additional_data={}
             )
             return {
@@ -228,6 +232,7 @@ async def check_company_exists(
                 job_url=job_url or "",
                 job_title=job_title,
                 job_id=job_id,
+                job_salary_range=job_salary_range,
                 additional_data={}
             )
             return {

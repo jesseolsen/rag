@@ -55,8 +55,51 @@ def _extract_hyperlink_url(cell_value: str) -> str:
     return ''
 
 
+def _col_letter(idx: int) -> str:
+    """Convert 0-based column index to letter(s): 0→A, 25→Z, 26→AA, etc."""
+    result = ''
+    idx += 1  # Convert to 1-based
+    while idx > 0:
+        idx -= 1
+        result = chr(ord('A') + (idx % 26)) + result
+        idx //= 26
+    return result
+
+
 class GoogleSheetsService:
     """Service for interacting with Google Sheets API."""
+
+    # Column name → fallback letter (used when header not found)
+    COLUMN_DEFAULTS = {
+        'company':          'A',
+        'gd_rating':        'B',
+        'gd_stars':         'C',
+        'recommend_pct':    'D',
+        'employee_count':   'E',
+        'ceo_pct':          'F',
+        'median_pay':       'G',
+        'job_salary_range': 'H',
+        'job_title':        'I',
+        'job_req':          'J',
+        'applied_date':     'K',
+        'rejection_date':   'L',
+    }
+
+    # Maps logical key → substrings to match in header cell (case-insensitive)
+    COLUMN_HEADER_PATTERNS = {
+        'company':          ['company'],
+        'gd_rating':        ['gd rating', 'glassdoor rating'],
+        'gd_stars':         ['glassdoor stars', 'gd stars', 'stars'],
+        'recommend_pct':    ['recommend'],
+        'employee_count':   ['employee'],
+        'ceo_pct':          ['ceo'],
+        'median_pay':       ['median', 'median total pay', 'glassdoor / median'],
+        'job_salary_range': ['job salary range', 'salary range'],
+        'job_title':        ['job title', 'title/link', 'job title/link'],
+        'job_req':          ['job req', 'req id', 'requisition'],
+        'applied_date':     ['applied date', 'applied'],
+        'rejection_date':   ['rejection date', 'rejection'],
+    }
 
     def __init__(self, credentials_file: Optional[str] = None):
         """Initialize Google Sheets service.
@@ -86,6 +129,44 @@ class GoogleSheetsService:
             print(f"[GOOGLE_SHEETS] Failed to initialize service: {e}")
             self.init_error = str(e)
             self.service = None
+
+    def _resolve_columns(self, spreadsheet_id: str, sheet_name: str) -> dict:
+        """Read row 1 and return a dict mapping logical key → 0-based column index.
+        Falls back to the hardcoded default letter if a header isn't found.
+
+        Args:
+            spreadsheet_id: The spreadsheet ID
+            sheet_name: Name of the sheet
+
+        Returns:
+            Dict mapping logical key (e.g. 'job_title') to 0-based column index
+        """
+        col_map = {}
+        try:
+            result = self.service.spreadsheets().values().get(
+                spreadsheetId=spreadsheet_id,
+                range=f'{sheet_name}!1:1',
+            ).execute()
+            headers = result.get('values', [[]])[0]
+            headers_lower = [str(h).lower().strip() for h in headers]
+
+            for key, patterns in self.COLUMN_HEADER_PATTERNS.items():
+                found = None
+                for i, h in enumerate(headers_lower):
+                    if any(p in h for p in patterns):
+                        found = i
+                        break
+                if found is not None:
+                    col_map[key] = found
+                else:
+                    # Fallback to default letter
+                    col_map[key] = ord(self.COLUMN_DEFAULTS[key]) - ord('A')
+        except Exception as e:
+            # Full fallback: use default letters for everything
+            print(f"[GOOGLE_SHEETS] Error resolving columns, using defaults: {e}")
+            for key, letter in self.COLUMN_DEFAULTS.items():
+                col_map[key] = ord(letter) - ord('A')
+        return col_map
 
     def extract_spreadsheet_id(self, url: str) -> Optional[str]:
         """Extract spreadsheet ID from Google Sheets URL.
@@ -698,11 +779,12 @@ class GoogleSheetsService:
 
         try:
             company_name_normalized = normalize_company_name(company_name)
+            cols = self._resolve_columns(spreadsheet_id, sheet_name)
 
-            # Read all values from columns A-I (company, ratings, job info, job ID)
+            # Read all values
             result = self.service.spreadsheets().values().get(
                 spreadsheetId=spreadsheet_id,
-                range=f'{sheet_name}!A:I'
+                range=f'{sheet_name}!A:Z'
             ).execute()
 
             values = result.get('values', [])
@@ -730,16 +812,16 @@ class GoogleSheetsService:
                     if company_text and normalize_company_name(company_text) == company_name_normalized:
                         company_exists = True
 
-                        # Extract cached Glassdoor rating (column C, index 2)
-                        if not cached_rating and len(row) > 2 and row[2]:
+                        # Extract cached Glassdoor rating
+                        if not cached_rating and len(row) > cols['gd_stars'] and row[cols['gd_stars']]:
                             try:
-                                cached_rating = float(row[2])
+                                cached_rating = float(row[cols['gd_stars']])
                             except (ValueError, TypeError):
                                 pass
 
-                        # Check if this is a duplicate job (same job ID in column I)
-                        if job_id and len(row) > 8 and row[8]:
-                            existing_job_id = str(row[8]).strip()
+                        # Check if this is a duplicate job (same job ID)
+                        if job_id and len(row) > cols['job_req'] and row[cols['job_req']]:
+                            existing_job_id = str(row[cols['job_req']]).strip()
                             if existing_job_id == str(job_id).strip():
                                 is_duplicate_job = True
                                 break
@@ -762,6 +844,7 @@ class GoogleSheetsService:
         job_url: str,
         job_title: Optional[str] = None,
         job_id: Optional[str] = None,
+        job_salary_range: Optional[str] = None,
         additional_data: Optional[dict] = None
     ) -> bool:
         """Add or update a job application entry in the spreadsheet.
@@ -770,12 +853,12 @@ class GoogleSheetsService:
         - If job_id exists for this company: UPDATES that row (no duplicate)
         - If new job: Inserts row alphabetically by company name
         - Copies Glassdoor data from existing company rows if available
-        - Stores job title with hyperlink in column H and job ID in column I
+        - Stores job salary range, job title hyperlink, job ID, applied date
 
-        Column structure:
-        A=Company, B=GD Rating (2025), C=Glassdoor Stars (5),
-        D=Recommend to friend %, E=Employee Count, F=CEO %, G=Median Pay,
-        H=Job Title/Link, I=Job Req ID, J=Applied Date, ...
+        Column structure (resolved dynamically from headers, with fallback):
+        A=Company, B=GD Rating, C=Glassdoor Stars, D=Recommend %, E=Employee Count,
+        F=CEO %, G=Median Pay, H=Job Salary Range, I=Job Title/Link, J=Job Req ID,
+        K=Applied Date, L=Rejection Date, ...
 
         Args:
             spreadsheet_url: The Google Sheets URL
@@ -783,6 +866,7 @@ class GoogleSheetsService:
             job_url: URL of the job application page
             job_title: Optional job title
             job_id: Optional job ID/requisition number
+            job_salary_range: Optional job-specific salary range (e.g., "$60K-$80K")
             additional_data: Optional additional columns (e.g., date, status, notes)
 
         Returns:
@@ -828,6 +912,7 @@ class GoogleSheetsService:
                 job_id=job_id,
                 job_url=job_url,
                 job_title=job_title,
+                job_salary_range=job_salary_range,
                 additional_data=additional_data
             )
 
@@ -844,36 +929,44 @@ class GoogleSheetsService:
         # Find alphabetical insert position
         insert_row = self.find_alphabetical_insert_position(spreadsheet_id, sheet_name, company_name)
 
-        # Build row data according to column structure
-        # Column A: Company name
-        row_data = [
-            company_name,  # A: Company name only
-            '',            # B: GD Rating (2025) - leave empty for now
-            glassdoor_data.get('rating', '') if glassdoor_data else '',  # C: Glassdoor Stars (5)
-            glassdoor_data.get('recommend_pct', '') if glassdoor_data else '',  # D: Recommend %
-            glassdoor_data.get('employee_count', '') if glassdoor_data else '',  # E: Employee Count
-            glassdoor_data.get('ceo_pct', '') if glassdoor_data else '',  # F: CEO %
-            glassdoor_data.get('median_pay', '') if glassdoor_data else '',  # G: Median Pay
-        ]
+        # Resolve column indices from headers
+        cols = self._resolve_columns(spreadsheet_id, sheet_name)
+        max_col = max(cols['applied_date'], cols['job_req']) + 1  # Need at least up to applied date
 
-        # Column H: Job Title with hyperlink to job URL
+        # Build row data with dynamic column placement
+        row_data = [''] * max_col
+
+        # Fill in the data
+        row_data[cols['company']] = company_name
+        row_data[cols['gd_rating']] = ''  # GD Rating (2025) - leave empty for now
+        if glassdoor_data:
+            row_data[cols['gd_stars']] = glassdoor_data.get('rating', '')
+            row_data[cols['recommend_pct']] = glassdoor_data.get('recommend_pct', '')
+            row_data[cols['employee_count']] = glassdoor_data.get('employee_count', '')
+            row_data[cols['ceo_pct']] = glassdoor_data.get('ceo_pct', '')
+            row_data[cols['median_pay']] = glassdoor_data.get('median_pay', '')
+
+        # Job Salary Range
+        row_data[cols['job_salary_range']] = job_salary_range or ''
+
+        # Job Title with hyperlink to job URL
         if job_title and job_url:
             job_title_formula = f'=HYPERLINK("{job_url}", "{job_title}")'
-            row_data.append(job_title_formula)
+            row_data[cols['job_title']] = job_title_formula
         elif job_url:
             job_title_formula = f'=HYPERLINK("{job_url}", "Job Link")'
-            row_data.append(job_title_formula)
+            row_data[cols['job_title']] = job_title_formula
         else:
-            row_data.append(job_title or '')
+            row_data[cols['job_title']] = job_title or ''
 
-        # Column I: Job Req ID
-        row_data.append(job_id or '')
+        # Job Req ID
+        row_data[cols['job_req']] = job_id or ''
 
-        # Column J: Applied Date
+        # Applied Date
         if additional_data and 'date' in additional_data:
-            row_data.append(additional_data['date'])
+            row_data[cols['applied_date']] = additional_data['date']
         else:
-            row_data.append('')  # Leave empty if no date provided
+            row_data[cols['applied_date']] = ''
 
         try:
             # FINAL SAFETY CHECK: Check one more time right before inserting to prevent race conditions
@@ -912,7 +1005,8 @@ class GoogleSheetsService:
             ).execute()
 
             # Now update the inserted row with our data
-            update_range = f'{sheet_name}!A{insert_row}:J{insert_row}'  # A through J (10 columns)
+            end_col_letter = _col_letter(max_col - 1)
+            update_range = f'{sheet_name}!A{insert_row}:{end_col_letter}{insert_row}'
             body = {
                 'values': [row_data]
             }
@@ -941,9 +1035,10 @@ class GoogleSheetsService:
         job_id: str,
         job_url: str,
         job_title: Optional[str] = None,
+        job_salary_range: Optional[str] = None,
         additional_data: Optional[dict] = None
     ) -> bool:
-        """Update an existing job row with job title link and applied date.
+        """Update an existing job row with job salary range, title link, and applied date.
 
         Args:
             spreadsheet_id: The spreadsheet ID
@@ -952,6 +1047,7 @@ class GoogleSheetsService:
             job_id: Job ID to find
             job_url: URL to the job
             job_title: Job title
+            job_salary_range: Job-specific salary range
             additional_data: Additional data like applied date
 
         Returns:
@@ -959,11 +1055,13 @@ class GoogleSheetsService:
         """
         try:
             company_name_normalized = normalize_company_name(company_name)
+            cols = self._resolve_columns(spreadsheet_id, sheet_name)
+            max_col = max(cols['applied_date'], cols['job_req']) + 1
 
             # Read all values to find the matching row
             result = self.service.spreadsheets().values().get(
                 spreadsheetId=spreadsheet_id,
-                range=f'{sheet_name}!A:J'
+                range=f'{sheet_name}!A:Z'
             ).execute()
 
             values = result.get('values', [])
@@ -986,8 +1084,8 @@ class GoogleSheetsService:
                         company_text = cell_value
 
                     if company_text and normalize_company_name(company_text) == company_name_normalized:
-                        # Check if job ID matches (column I, index 8)
-                        if len(row) > 8 and str(row[8]).strip() == str(job_id).strip():
+                        # Check if job ID matches
+                        if len(row) > cols['job_req'] and str(row[cols['job_req']]).strip() == str(job_id).strip():
                             row_index = i
                             break
 
@@ -996,25 +1094,30 @@ class GoogleSheetsService:
                 return False
 
             # Get the current row data
-            current_row = values[row_index]
-            while len(current_row) < 10:
+            current_row = list(values[row_index]) if row_index < len(values) else []
+            while len(current_row) < max_col:
                 current_row.append('')
 
-            # Update column H: Job Title with hyperlink
-            if job_title and job_url:
-                current_row[7] = f'=HYPERLINK("{job_url}", "{job_title}")'
-            elif job_url:
-                current_row[7] = f'=HYPERLINK("{job_url}", "Job Link")'
+            # Update job salary range
+            if job_salary_range:
+                current_row[cols['job_salary_range']] = job_salary_range
 
-            # Update column J: Applied Date
+            # Update job Title with hyperlink
+            if job_title and job_url:
+                current_row[cols['job_title']] = f'=HYPERLINK("{job_url}", "{job_title}")'
+            elif job_url:
+                current_row[cols['job_title']] = f'=HYPERLINK("{job_url}", "Job Link")'
+
+            # Update applied Date
             if additional_data and 'date' in additional_data:
-                current_row[9] = additional_data['date']
+                current_row[cols['applied_date']] = additional_data['date']
 
             # Update the row
             row_number = row_index + 1
-            update_range = f'{sheet_name}!A{row_number}:J{row_number}'
+            end_col_letter = _col_letter(max_col - 1)
+            update_range = f'{sheet_name}!A{row_number}:{end_col_letter}{row_number}'
             body = {
-                'values': [current_row[:10]]
+                'values': [current_row[:max_col]]
             }
 
             self.service.spreadsheets().values().update(
@@ -1038,15 +1141,15 @@ class GoogleSheetsService:
         job_title: Optional[str] = None,
         rejection_date: Optional[str] = None
     ) -> dict:
-        """Write a rejection date into column K for the matching company/job row.
+        """Write a rejection date into the rejection_date column for the matching company/job row.
 
         Match strategy:
-        1. If job_title is provided, prefer the row whose column H (Job Title/Link)
+        1. If job_title is provided, prefer the row whose job_title column
            contains the title (fuzzy, normalized).
         2. Otherwise, or if no title match, pick the row with the most recent
-           Applied Date (column J) that does NOT already have a Rejection Date.
+           Applied Date that does NOT already have a Rejection Date.
         3. If still no candidate, fall back to the most recent applied row even
-           if column K is already set (this overwrites).
+           if rejection_date is already set (this overwrites).
 
         Args:
             spreadsheet_url: The Google Sheets URL
@@ -1087,11 +1190,12 @@ class GoogleSheetsService:
 
         company_norm = normalize_company_name(company_name)
         title_norm = normalize_title(job_title) if job_title else None
+        cols = self._resolve_columns(spreadsheet_id, sheet_name)
 
         try:
             result = self.service.spreadsheets().values().get(
                 spreadsheetId=spreadsheet_id,
-                range=f'{sheet_name}!A:K'
+                range=f'{sheet_name}!A:Z'
             ).execute()
             values = result.get('values', [])
 
@@ -1111,17 +1215,17 @@ class GoogleSheetsService:
                 if normalize_company_name(company_text) != company_norm:
                     continue
 
-                # Extract job title display text from column H (index 7)
-                title_cell = row[7] if len(row) > 7 else ''
+                # Extract job title display text from job_title column
+                title_cell = row[cols['job_title']] if len(row) > cols['job_title'] else ''
                 if isinstance(title_cell, str) and title_cell.startswith('=HYPERLINK'):
                     m = re.search(r'"([^"]*)"[^"]*$', title_cell)
                     title_text = m.group(1) if m else ''
                 else:
                     title_text = title_cell or ''
 
-                job_id_val = str(row[8]).strip() if len(row) > 8 and row[8] else ''
-                applied = str(row[9]).strip() if len(row) > 9 and row[9] else ''
-                rejected = str(row[10]).strip() if len(row) > 10 and row[10] else ''
+                job_id_val = str(row[cols['job_req']]).strip() if len(row) > cols['job_req'] and row[cols['job_req']] else ''
+                applied = str(row[cols['applied_date']]).strip() if len(row) > cols['applied_date'] and row[cols['applied_date']] else ''
+                rejected = str(row[cols['rejection_date']]).strip() if len(row) > cols['rejection_date'] and row[cols['rejection_date']] else ''
 
                 candidates.append({
                     'index': i,
@@ -1176,7 +1280,8 @@ class GoogleSheetsService:
             row_index = chosen['index']
             matched_title = chosen['title']
             row_number = row_index + 1
-            update_range = f'{sheet_name}!K{row_number}'
+            rejection_col_letter = _col_letter(cols['rejection_date'])
+            update_range = f'{sheet_name}!{rejection_col_letter}{row_number}'
             self.service.spreadsheets().values().update(
                 spreadsheetId=spreadsheet_id,
                 range=update_range,
@@ -1242,10 +1347,11 @@ class GoogleSheetsService:
                 return {'success': False, 'message': f'Error getting sheet info: {e}'}
 
         company_norm = normalize_company_name(company_name)
+        cols = self._resolve_columns(spreadsheet_id, sheet_name)
 
         try:
             # Read all rows — use Z as a wide upper bound to capture user columns
-            # beyond K. valueRenderOption=FORMULA preserves =HYPERLINK formulas.
+            # beyond L. valueRenderOption=FORMULA preserves =HYPERLINK formulas.
             result = self.service.spreadsheets().values().get(
                 spreadsheetId=spreadsheet_id,
                 range=f'{sheet_name}!A:Z',
@@ -1284,7 +1390,7 @@ class GoogleSheetsService:
                 return v is None or (isinstance(v, str) and v.strip() == '')
 
             def is_placeholder_title(v):
-                # Column H placeholder: =HYPERLINK("...", "Job Link") or literal "Job Link"
+                # Job Title placeholder: =HYPERLINK("...", "Job Link") or literal "Job Link"
                 if isinstance(v, str):
                     text = _extract_hyperlink_text(v)
                     return text.strip().lower() == 'job link'
@@ -1297,11 +1403,11 @@ class GoogleSheetsService:
                 non_empty = [v for v in col_values if not is_empty(v)]
                 if not non_empty:
                     continue
-                if col == 0:
+                if col == cols['company']:
                     # Company: pick longest (preserves "Inc." etc.)
                     display_texts = [(_extract_hyperlink_text(v), v) for v in non_empty]
                     merged[col] = max(display_texts, key=lambda t: len(t[0]))[1]
-                elif col == 7:
+                elif col == cols['job_title']:
                     # Job Title/Link: prefer non-placeholder
                     real = [v for v in non_empty if not is_placeholder_title(v)]
                     merged[col] = real[0] if real else non_empty[0]
@@ -1375,8 +1481,8 @@ class GoogleSheetsService:
 
         Returns:
             List of dicts with keys: company, company_url, job_title, job_url,
-            job_id, applied_date, rejection_date, glassdoor_stars, recommend_pct,
-            employee_count, ceo_pct, median_pay
+            job_id, job_salary_range, applied_date, rejection_date, glassdoor_stars,
+            recommend_pct, employee_count, ceo_pct, median_pay
         """
         if not self.service:
             return []
@@ -1398,9 +1504,10 @@ class GoogleSheetsService:
                 return []
 
         try:
+            cols = self._resolve_columns(spreadsheet_id, sheet_name)
             result = self.service.spreadsheets().values().get(
                 spreadsheetId=spreadsheet_id,
-                range=f'{sheet_name}!A:K',
+                range=f'{sheet_name}!A:Z',
                 valueRenderOption='FORMULA',
             ).execute()
             values = result.get('values', [])
@@ -1424,11 +1531,11 @@ class GoogleSheetsService:
             if not company:
                 continue
 
-            col_h = row[7] if len(row) > 7 else ''
-            job_title = _extract_hyperlink_text(col_h)
-            job_url = _extract_hyperlink_url(col_h)
+            col_job_title = row[cols['job_title']] if len(row) > cols['job_title'] else ''
+            job_title = _extract_hyperlink_text(col_job_title)
+            job_url = _extract_hyperlink_url(col_job_title)
 
-            rejection_date = str(row[10] if len(row) > 10 else '').strip()
+            rejection_date = str(row[cols['rejection_date']] if len(row) > cols['rejection_date'] else '').strip()
 
             if status == "active" and rejection_date:
                 continue
@@ -1440,14 +1547,15 @@ class GoogleSheetsService:
                 'company_url': company_url,
                 'job_title': job_title,
                 'job_url': job_url,
-                'job_id': str(row[8] if len(row) > 8 else '').strip(),
-                'applied_date': str(row[9] if len(row) > 9 else '').strip(),
+                'job_id': str(row[cols['job_req']] if len(row) > cols['job_req'] else '').strip(),
+                'job_salary_range': str(row[cols['job_salary_range']] if len(row) > cols['job_salary_range'] else '').strip(),
+                'applied_date': str(row[cols['applied_date']] if len(row) > cols['applied_date'] else '').strip(),
                 'rejection_date': rejection_date,
-                'glassdoor_stars': _extract_hyperlink_text(row[2] if len(row) > 2 else ''),
-                'recommend_pct': str(row[3] if len(row) > 3 else '').strip(),
-                'employee_count': str(row[4] if len(row) > 4 else '').strip(),
-                'ceo_pct': str(row[5] if len(row) > 5 else '').strip(),
-                'median_pay': str(row[6] if len(row) > 6 else '').strip(),
+                'glassdoor_stars': _extract_hyperlink_text(row[cols['gd_stars']] if len(row) > cols['gd_stars'] else ''),
+                'recommend_pct': str(row[cols['recommend_pct']] if len(row) > cols['recommend_pct'] else '').strip(),
+                'employee_count': str(row[cols['employee_count']] if len(row) > cols['employee_count'] else '').strip(),
+                'ceo_pct': str(row[cols['ceo_pct']] if len(row) > cols['ceo_pct'] else '').strip(),
+                'median_pay': str(row[cols['median_pay']] if len(row) > cols['median_pay'] else '').strip(),
             })
 
         return applications

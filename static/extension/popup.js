@@ -153,7 +153,8 @@ async function loadCompanyName(serverAvailable = true) {
                     response.jobId,
                     statusIndicator,
                     response.jobTitle,
-                    tab.url  // Current tab URL
+                    tab.url,  // Current tab URL
+                    response.jobSalaryRange  // Job salary range if available
                 );
 
                 // Load Glassdoor rating (will use cached if available, otherwise fetch)
@@ -171,7 +172,7 @@ async function loadCompanyName(serverAvailable = true) {
     }
 }
 
-async function checkCompanyStatus(companyName, jobId, statusIndicator, jobTitle, jobUrl) {
+async function checkCompanyStatus(companyName, jobId, statusIndicator, jobTitle, jobUrl, jobSalaryRange) {
     // Prevent duplicate simultaneous calls
     if (companyCheckInProgress) {
         console.log('[POPUP] Company check already in progress, skipping duplicate call');
@@ -212,6 +213,9 @@ async function checkCompanyStatus(companyName, jobId, statusIndicator, jobTitle,
         }
         if (jobUrl) {
             url += `&job_url=${encodeURIComponent(jobUrl)}`;
+        }
+        if (jobSalaryRange) {
+            url += `&job_salary_range=${encodeURIComponent(jobSalaryRange)}`;
         }
 
         const response = await fetch(url);
