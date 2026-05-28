@@ -103,5 +103,13 @@ else
 
   # Start server
   echo -e "${GREEN}Starting uvicorn server...${NC}"
+
+  # Kill any existing process on port 8000
+  if lsof -ti:8000 > /dev/null 2>&1; then
+    echo "Killing existing process on port 8000..."
+    lsof -ti:8000 | xargs kill -9 2>/dev/null || true
+    sleep 1
+  fi
+
   $VENV_PYTHON -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 fi
