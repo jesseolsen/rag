@@ -2902,16 +2902,11 @@ function detectApplyButtonClick(event) {
             console.log('[RESUME_RAG] Recording application submission for:', companyName);
             applicationSubmitted = true;
 
-<<<<<<< HEAD
-            // Send to backend to update Applied Date
-            chrome.storage.local.get('backendUrl', async (result) => {
-=======
             // Extract job salary range
             const jobSalaryRange = extractJobSalaryRange();
 
             // Send to backend to update Applied Date and other fields
-            chrome.storage.sync.get('backendUrl', async (result) => {
->>>>>>> 9778180 (Add job salary range column with dynamic column resolution)
+            chrome.storage.local.get('backendUrl', async (result) => {
                 const backendUrl = result.backendUrl || 'http://localhost:8000';
 
                 try {
