@@ -490,6 +490,40 @@ function extractCompanyName() {
         }
     }
 
+    // Special handling for Jobright.ai - extract company from the job details
+    if (hostname.includes('jobright.ai')) {
+        // Look for company name badge or section with company info
+        // Jobright shows company as "COMPANY_NAME - days ago" or in company details area
+        const selectors = [
+            // Company name next to time posted (e.g., "VAS • 4 days ago")
+            '[class*="company"]',
+            '[class*="Company"]',
+            '[data-testid*="company"]',
+        ];
+
+        for (const selector of selectors) {
+            const elements = document.querySelectorAll(selector);
+            for (const el of elements) {
+                const text = el.textContent?.trim();
+                // Match pattern like "VAS • 4 days ago" or "VAS - 4 days ago"
+                const match = text && text.match(/^([A-Z][A-Z0-9\s&.,-]*?)\s*(?:•|-|–—)?\s*\d+\s+(?:days?|hours?|minutes?|weeks?|months?)\s+ago/i);
+                if (match) {
+                    const companyName = match[1].trim();
+                    console.log('[RESUME_RAG] Company from Jobright.ai:', companyName);
+                    return companyName;
+                }
+            }
+        }
+
+        // Fallback: Look for the company section heading or main company text
+        const pageText = document.body.textContent || '';
+        const companyMatch = pageText.match(/^([A-Z]{2,10})\s+(?:•|-|–—)?\s*\d+\s+(?:days?|hours?|minutes?|weeks?|months?)\s+ago/m);
+        if (companyMatch) {
+            console.log('[RESUME_RAG] Company from Jobright.ai text:', companyMatch[1]);
+            return companyMatch[1];
+        }
+    }
+
     // Workday job pages: *.myworkdayjobs.com or *.workday.com
     if (hostname.includes('myworkdayjobs.com') || hostname.includes('.workday.com')) {
         // Try page title: "AI Product Engineer - Guidewire Careers" or "Guidewire Careers"
