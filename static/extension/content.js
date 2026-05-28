@@ -492,42 +492,52 @@ function extractCompanyName() {
 
     // Special handling for Jobright.ai - extract company from the job details
     if (hostname.includes('jobright.ai')) {
-        // Look for company name badge or section with company info
-        // Jobright shows company as "COMPANY_NAME - days ago" or in company details area
-        const selectors = [
-            // Company name next to time posted (e.g., "VAS • 4 days ago")
-            '[class*="company"]',
-            '[class*="Company"]',
-            '[data-testid*="company"]',
-        ];
+        // Look for company name in the company row section
+        // Jobright has a company badge with class like "index_company-row_UKMbo"
+        // containing a span with the company name and "X hours/days ago"
 
-        for (const selector of selectors) {
-            const elements = document.querySelectorAll(selector);
-            for (const el of elements) {
-                const text = el.textContent?.trim();
-                // Match pattern like "VAS • 4 days ago" or "VAS - 4 days ago"
-                // Also match company names with spaces (e.g., "Citizen Health")
-                const match = text && text.match(/^([A-Z][A-Z0-9\s&.,-]*?)\s*(?:•|-|–—)?\s*\d+\s+(?:days?|hours?|minutes?|weeks?|months?)\s+ago/i);
-                if (match) {
-                    let companyName = match[1].trim();
-                    // Replace URL-encoded spaces (%20) with actual spaces
-                    companyName = companyName.replace(/%20/g, ' ');
-                    console.log('[RESUME_RAG] Company from Jobright.ai:', companyName);
+        // Strategy 1: Find the company row/badge element with the specific pattern
+        const elements = document.querySelectorAll('[class*="company-row"], [class*="Company"], [class*="company"]');
+        for (const el of elements) {
+            const text = el.textContent?.trim();
+            if (!text) continue;
+
+            // Match just the company name before the time (e.g., "Comet 4 hours ago")
+            const match = text.match(/^([A-Z][A-Za-z0-9\s&.,-]*?)\s*(?:\d+\s+(?:hours?|days?|weeks?|months?|minutes?)\s+ago|•|–|—)/i);
+            if (match) {
+                let companyName = match[1].trim();
+                companyName = companyName.replace(/%20/g, ' ');
+                if (companyName.length > 1 && companyName.length < 100) {
+                    console.log('[RESUME_RAG] Company from Jobright.ai company row:', companyName);
                     return companyName;
                 }
             }
         }
 
-        // Fallback: Look for the company section heading or main company text
-        const pageText = document.body.textContent || '';
-        const companyMatch = pageText.match(/^([A-Z][A-Z0-9\s&.,%\-]*?)\s+(?:•|-|–—)?\s*\d+\s+(?:days?|hours?|minutes?|weeks?|months?)\s+ago/m);
-        if (companyMatch) {
-            let companyName = companyMatch[1].trim();
-            // Replace URL-encoded spaces (%20) with actual spaces
-            companyName = companyName.replace(/%20/g, ' ');
-            console.log('[RESUME_RAG] Company from Jobright.ai text:', companyName);
-            return companyName;
+        // Strategy 2: Look for text node or span that has just the company name
+        // within a company-related container, preceded by a logo or badge
+        const mainContent = document.querySelector('main, [role="main"], .index_jobs-page-main-content');
+        if (mainContent) {
+            const spans = mainContent.querySelectorAll('span, div, h2, h3');
+            for (const span of spans) {
+                const text = span.textContent?.trim();
+                // Look for a standalone company name (typically 1-4 words, capitalized)
+                const match = text && text.match(/^([A-Z][A-Za-z0-9\s&.,-]{0,50}?)\s*(?:\d+\s+(?:hours?|days?|weeks?|months?|minutes?)\s+ago)?$/);
+                if (match) {
+                    const companyName = match[1].trim();
+                    // Filter: must be 2-50 chars, not a common word
+                    if (companyName.length >= 2 &&
+                        companyName.length <= 50 &&
+                        !/^(the|a|an|and|or|job|position|role|title|apply|see|view|open|new|get)$/i.test(companyName)) {
+                        console.log('[RESUME_RAG] Company from Jobright.ai content:', companyName);
+                        return companyName;
+                    }
+                }
+            }
         }
+
+        console.log('[RESUME_RAG] Could not extract company from Jobright.ai');
+        return null;
     }
 
     // Workday job pages: *.myworkdayjobs.com or *.workday.com
