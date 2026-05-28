@@ -2951,6 +2951,22 @@ function detectApplyButtonClick(event) {
                     console.log('[RESUME_RAG] Error recording application:', error);
                 }
             });
+
+            // If this was a form submission, wait a moment before letting it proceed
+            // This ensures the backend request completes before the page navigates away
+            if (isSubmitButton || event.target.form) {
+                event.preventDefault();
+                console.log('[RESUME_RAG] Delaying form submission to ensure backend update completes');
+                setTimeout(() => {
+                    if (event.target.form) {
+                        event.target.form.submit();
+                    } else if (isSubmitButton && target.click) {
+                        // Re-trigger the click without interception
+                        target.removeEventListener('click', detectApplyButtonClick, true);
+                        target.click();
+                    }
+                }, 800); // Wait 800ms for backend to process
+            }
         }
     }
 }
