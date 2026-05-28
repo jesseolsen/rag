@@ -101,6 +101,12 @@ else
   echo "Installing dependencies..."
   $VENV_PIP install -q -r requirements.txt
 
+  # Initialize database if needed
+  if [ -f "init_db.py" ]; then
+    echo "Initializing database..."
+    $VENV_PYTHON init_db.py > /dev/null 2>&1 || true
+  fi
+
   # Start server
   echo -e "${GREEN}Starting uvicorn server...${NC}"
 
