@@ -2575,8 +2575,15 @@ function detectGlassdoorPage() {
         const urlMatch = url.match(/Working-at-(.+?)-EI_IE\d+/);
         if (urlMatch) {
             const companySlug = urlMatch[1];
-            // Replace hyphens with spaces, but preserve dots (for .com, .io, etc.)
-            companyName = companySlug.replace(/-/g, ' ').trim();
+            // Replace hyphens with dots (for .com, .io) or spaces for other hyphens
+            // "Owner-com" → "Owner.com", "My-Company" → "My Company"
+            companyName = companySlug
+                .replace(/-com$/, '.com')  // Handle "-com" suffix
+                .replace(/-io$/, '.io')    // Handle "-io" suffix
+                .replace(/-co$/, '.co')    // Handle "-co" suffix
+                .replace(/-org$/, '.org')  // Handle "-org" suffix
+                .replace(/-/g, ' ')        // Replace remaining hyphens with spaces
+                .trim();
         }
     }
 
