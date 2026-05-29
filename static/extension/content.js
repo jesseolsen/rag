@@ -2569,11 +2569,14 @@ function detectGlassdoorPage() {
         }
     }
 
-    // Method 3: From URL
+    // Method 3: From URL (handles company names with hyphens like "Owner-com")
     if (!companyName) {
-        const urlMatch = url.match(/Working-at-(.+?)-EI_/);
+        // Match "Working-at-" followed by company name, then "-EI_" followed by digits
+        const urlMatch = url.match(/Working-at-(.+?)-EI_IE\d+/);
         if (urlMatch) {
-            companyName = urlMatch[1].replace(/-/g, ' ');
+            const companySlug = urlMatch[1];
+            // Replace hyphens with spaces, but preserve dots (for .com, .io, etc.)
+            companyName = companySlug.replace(/-/g, ' ').trim();
         }
     }
 
