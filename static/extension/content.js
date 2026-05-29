@@ -9,6 +9,13 @@ window.RESUME_RAG_RESUME_DATA = {};
 window.RESUME_RAG_BACKEND_URL_STORED = 'http://localhost:8000';
 window.RESUME_RAG_FILLED_FIELDS = {}; // Track which fields were filled by extension
 window.RESUME_RAG_EXTENSION_ACTIVE = false; // Only true when user explicitly uses extension on this page
+window.RESUME_RAG_ENABLED = true; // Extension enabled/disabled state
+
+// Initialize extension enabled state from storage
+chrome.storage.local.get(['extensionEnabled'], (result) => {
+    window.RESUME_RAG_ENABLED = result.extensionEnabled !== false; // Default to enabled
+    console.log('[RESUME_RAG] Extension enabled state:', window.RESUME_RAG_ENABLED);
+});
 
 // Helper function to make API requests through background script (avoids CORS issues with localhost)
 async function apiRequest(url, options = {}) {
@@ -62,6 +69,8 @@ async function apiRequest(url, options = {}) {
 
 // Listen for input changes on file inputs - detect when file picker opens
 document.addEventListener('change', async (e) => {
+    if (!window.RESUME_RAG_ENABLED) return;
+
     const fileInput = e.target;
     if (fileInput.type !== 'file') return;
 
@@ -90,6 +99,8 @@ document.addEventListener('change', async (e) => {
 
 // Listen for Attach button clicks to populate file inputs
 document.addEventListener('click', async (e) => {
+    if (!window.RESUME_RAG_ENABLED) return;
+
     // Check if clicked element is an "Attach" button
     const button = e.target.closest('button');
     if (!button) return;
@@ -140,6 +151,20 @@ document.addEventListener('click', async (e) => {
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     console.log('[RESUME_RAG] Message received:', request.action, 'from:', sender.url);
+
+    // Handle extension state change notifications
+    if (request.action === 'extensionStateChanged') {
+        window.RESUME_RAG_ENABLED = request.enabled;
+        console.log('[RESUME_RAG] Extension state changed to:', window.RESUME_RAG_ENABLED);
+        return;
+    }
+
+    // Don't process other messages if extension is disabled
+    if (!window.RESUME_RAG_ENABLED && request.action !== 'getCompanyName') {
+        console.log('[RESUME_RAG] Extension is disabled, ignoring action:', request.action);
+        sendResponse({ success: false, error: 'Extension is disabled' });
+        return;
+    }
 
     if (request.action === 'fillForm') {
         // Store backend URL for use in form submission
@@ -738,9 +763,9 @@ async function trackJobApplication(backendUrl) {
 
 // Auto-capture answers on form submission
 document.addEventListener('submit', async (e) => {
-    // Only auto-capture if user has explicitly used the extension on this page
-    if (!window.RESUME_RAG_EXTENSION_ACTIVE) {
-        console.log('[RESUME_RAG] Form submission detected but extension not active - skipping auto-capture');
+    // Only auto-capture if extension is enabled and user has explicitly used it on this page
+    if (!window.RESUME_RAG_ENABLED || !window.RESUME_RAG_EXTENSION_ACTIVE) {
+        console.log('[RESUME_RAG] Form submission detected but extension not enabled/active - skipping auto-capture');
         return;
     }
 
@@ -2967,6 +2992,11 @@ if (window.location.hostname.includes('glassdoor.com')) {
 let applicationSubmitted = false;
 
 function detectApplyButtonClick(event) {
+    // Skip if extension is disabled
+    if (!window.RESUME_RAG_ENABLED) {
+        return;
+    }
+
     // Prevent duplicate submissions
     if (applicationSubmitted) {
         console.log('[RESUME_RAG] Application already submitted, ignoring');
