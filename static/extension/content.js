@@ -2435,15 +2435,22 @@ function extractJobSalaryRange() {
 // Extract pay range from a Glassdoor salary page and return data for column G
 function detectGlassdoorSalaryPage(url) {
     // Extract company name using the KO offset (marks where job title starts in the slug)
+    // URL format: /Salary/Company-Name-Job-Title-Salaries-E12345_D_KO16,41.htm
     let companyName = null;
-    const koMatch = url.match(/\/Salary\/(.+?)-Salaries-E\d+(?:[^K]*KO(\d+),)/i);
+
+    // Match the KO offset (e.g., _D_KO16)
+    const koMatch = url.match(/_D_KO(\d+)/);
     if (koMatch) {
-        const fullSlug = koMatch[1];
-        const koStart = parseInt(koMatch[2]);
-        if (koStart > 0) {
-            companyName = fullSlug.substring(0, koStart - 1).replace(/-/g, ' ');
+        const koOffset = parseInt(koMatch[1]);
+        // Extract the part before "-Salaries"
+        const slugMatch = url.match(/\/Salary\/(.+?)-Salaries-/i);
+        if (slugMatch && koOffset > 0) {
+            const fullSlug = slugMatch[1];
+            // KO offset tells us where job title starts (in characters)
+            companyName = fullSlug.substring(0, koOffset).replace(/-/g, ' ').trim();
         }
     }
+
     // Fallback: page title "Job Title Salaries at Company | Glassdoor"
     if (!companyName) {
         const titleMatch = document.title.match(/\bSalaries?\s+at\s+(.+?)(?:\s*[|–—-]|$)/i);
