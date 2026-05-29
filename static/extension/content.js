@@ -2527,18 +2527,16 @@ function detectGlassdoorPage() {
         return null;
     }
 
-    // ONLY allow Overview or Reviews pages (NOT Salary pages—those are reference data, not job applications)
+    // ONLY allow Overview, Reviews, or Salary pages
     const isOverviewPage = url.includes('/Overview/Working-at-') || url.includes('/Reviews/');
     const isSalaryPage = url.includes('/Salary/') && url.includes('-Salaries-');
 
-    // Skip Glassdoor salary pages entirely—they are NOT job applications
     if (isSalaryPage) {
-        console.log('[RESUME_RAG] Skipping Glassdoor salary page - not a job application');
-        return null;
+        return detectGlassdoorSalaryPage(url);
     }
 
     if (!isOverviewPage) {
-        console.log('[RESUME_RAG] Skipping Glassdoor page - not a company overview/reviews page');
+        console.log('[RESUME_RAG] Skipping Glassdoor page - not a company overview/reviews/salary page');
         return null;
     }
 
