@@ -2435,15 +2435,22 @@ function extractJobSalaryRange() {
 // Extract pay range from a Glassdoor salary page and return data for column G
 function detectGlassdoorSalaryPage(url) {
     // Extract company name using the KO offset (marks where job title starts in the slug)
+    // URL format: /Salary/Company-Name-Job-Title-Salaries-E12345_D_KO16,41.htm
     let companyName = null;
-    const koMatch = url.match(/\/Salary\/(.+?)-Salaries-E\d+(?:[^K]*KO(\d+),)/i);
+
+    // Match the KO offset (e.g., _D_KO16)
+    const koMatch = url.match(/_D_KO(\d+)/);
     if (koMatch) {
-        const fullSlug = koMatch[1];
-        const koStart = parseInt(koMatch[2]);
-        if (koStart > 0) {
-            companyName = fullSlug.substring(0, koStart - 1).replace(/-/g, ' ');
+        const koOffset = parseInt(koMatch[1]);
+        // Extract the part before "-Salaries"
+        const slugMatch = url.match(/\/Salary\/(.+?)-Salaries-/i);
+        if (slugMatch && koOffset > 0) {
+            const fullSlug = slugMatch[1];
+            // KO offset tells us where job title starts (in characters)
+            companyName = fullSlug.substring(0, koOffset).replace(/-/g, ' ').trim();
         }
     }
+
     // Fallback: page title "Job Title Salaries at Company | Glassdoor"
     if (!companyName) {
         const titleMatch = document.title.match(/\bSalaries?\s+at\s+(.+?)(?:\s*[|–—-]|$)/i);
@@ -2456,19 +2463,48 @@ function detectGlassdoorSalaryPage(url) {
     }
     console.log('[RESUME_RAG] Glassdoor salary page for:', companyName);
 
-    const pageText = document.body.textContent;
     let payRange = null;
 
-    // Range with en/em dash: "$74K – $147K"
-    const dashRangeMatch = pageText.match(/\$([\d,]+[KkMm]?)\s*[–—]\s*\$([\d,]+[KkMm]?)/);
-    if (dashRangeMatch) {
-        payRange = `$${dashRangeMatch[1].toUpperCase()}-$${dashRangeMatch[2].toUpperCase()}`;
+    // Priority 1: Target the "Total Pay" range element directly
+    // Look for the element containing the large green salary range text after "Total Pay" label
+    const totalPayElements = document.querySelectorAll('[class*="TotalPayRange"]');
+    for (const element of totalPayElements) {
+        const text = element.textContent;
+        // Look for pattern like "$125K - $178K" or "$125K–$178K"
+        const rangeMatch = text.match(/\$(\d+[KkMm]?)\s*[–—-]\s*\$(\d+[KkMm]?)/);
+        if (rangeMatch) {
+            payRange = `$${rangeMatch[1].toUpperCase()}-$${rangeMatch[2].toUpperCase()}`;
+            console.log('[RESUME_RAG] Extracted Total Pay from DOM element:', payRange);
+            break;
+        }
     }
-    // Range with hyphen and spaces: "$74K - $147K"
+
+    // Priority 2: Look for "Total Pay" label in page text (fallback)
     if (!payRange) {
+        const pageText = document.body.textContent;
+        const totalPayMatch = pageText.match(/Total\s*Pay\s*\$([\d,]+[KkMm]?)\s*[–—]\s*\$([\d,]+[KkMm]?)/i);
+        if (totalPayMatch) {
+            payRange = `$${totalPayMatch[1].toUpperCase()}-$${totalPayMatch[2].toUpperCase()}`;
+            console.log('[RESUME_RAG] Extracted Total Pay from text match:', payRange);
+        }
+    }
+
+    // Priority 3: Range with en/em dash: "$74K – $147K"
+    if (!payRange) {
+        const pageText = document.body.textContent;
+        const dashRangeMatch = pageText.match(/\$([\d,]+[KkMm]?)\s*[–—]\s*\$([\d,]+[KkMm]?)/);
+        if (dashRangeMatch) {
+            payRange = `$${dashRangeMatch[1].toUpperCase()}-$${dashRangeMatch[2].toUpperCase()}`;
+            console.log('[RESUME_RAG] Extracted pay range from dash pattern:', payRange);
+        }
+    }
+    // Priority 4: Range with hyphen and spaces: "$74K - $147K"
+    if (!payRange) {
+        const pageText = document.body.textContent;
         const hyphenRangeMatch = pageText.match(/\$([\d,]+[KkMm]?)\s+-\s+\$([\d,]+[KkMm]?)/);
         if (hyphenRangeMatch) {
             payRange = `$${hyphenRangeMatch[1].toUpperCase()}-$${hyphenRangeMatch[2].toUpperCase()}`;
+            console.log('[RESUME_RAG] Extracted pay range from hyphen pattern:', payRange);
         }
     }
     // Single value fallback: "$108K/yr"
@@ -2533,11 +2569,21 @@ function detectGlassdoorPage() {
         }
     }
 
-    // Method 3: From URL
+    // Method 3: From URL (handles company names with hyphens like "Owner-com")
     if (!companyName) {
-        const urlMatch = url.match(/Working-at-(.+?)-EI_/);
+        // Match "Working-at-" followed by company name, then "-EI_" followed by digits
+        const urlMatch = url.match(/Working-at-(.+?)-EI_IE\d+/);
         if (urlMatch) {
-            companyName = urlMatch[1].replace(/-/g, ' ');
+            const companySlug = urlMatch[1];
+            // Replace hyphens with dots (for .com, .io) or spaces for other hyphens
+            // "Owner-com" → "Owner.com", "My-Company" → "My Company"
+            companyName = companySlug
+                .replace(/-com$/, '.com')  // Handle "-com" suffix
+                .replace(/-io$/, '.io')    // Handle "-io" suffix
+                .replace(/-co$/, '.co')    // Handle "-co" suffix
+                .replace(/-org$/, '.org')  // Handle "-org" suffix
+                .replace(/-/g, ' ')        // Replace remaining hyphens with spaces
+                .trim();
         }
     }
 
@@ -2924,6 +2970,17 @@ function detectApplyButtonClick(event) {
     // Prevent duplicate submissions
     if (applicationSubmitted) {
         console.log('[RESUME_RAG] Application already submitted, ignoring');
+        return;
+    }
+
+    // Skip login/auth pages
+    const url = window.location.href.toLowerCase();
+    const isLoginPage = /login|sign.?in|signin|auth|authenticate|password|credential|2fa|mfa|verify/.test(url);
+    const pageTitle = document.title.toLowerCase();
+    const isTitleLogin = /login|sign.?in|signin|auth/.test(pageTitle);
+
+    if (isLoginPage || isTitleLogin) {
+        console.log('[RESUME_RAG] Skipping button click on login/auth page');
         return;
     }
 
