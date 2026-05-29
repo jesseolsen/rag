@@ -531,7 +531,13 @@
 </head>
 <body>
     <div class="container">
-        <h1>📋 Resume RAG</h1>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h1 style="margin: 0;">📋 Resume RAG</h1>
+            <label style="display: flex; align-items: center; gap: 8px; margin: 0; font-size: 12px; font-weight: 600; color: #555; cursor: pointer;">
+                <input type="checkbox" id="extensionToggle" style="width: 20px; height: 20px; cursor: pointer; margin: 0;">
+                <span id="toggleLabel">Enabled</span>
+            </label>
+        </div>
 
         <div id="companyNameDisplay" class="company-name-display">
             <div class="company-info-row">

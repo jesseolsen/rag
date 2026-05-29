@@ -59,6 +59,19 @@ function getServerErrorHtml(error) {
             <p><small>Check browser console (F12) for details.</small></p>`;
 }
 
+// Load extension enabled state from storage
+async function getExtensionEnabled() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get(['extensionEnabled'], (result) => {
+            resolve(result.extensionEnabled !== false); // Default to enabled
+        });
+    });
+}
+
+function saveExtensionEnabled(enabled) {
+    chrome.storage.local.set({ extensionEnabled: enabled });
+}
+
 // Load settings and resumes on popup open
 document.addEventListener('DOMContentLoaded', async () => {
     backendUrl = await getStoredBackendUrl() || DEFAULT_BACKEND_URL;
@@ -71,6 +84,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadFieldAnswers();
     }
     setupEventListeners();
+
+    // Load and set toggle state
+    const isEnabled = await getExtensionEnabled();
+    const toggle = document.getElementById('extensionToggle');
+    toggle.checked = isEnabled;
+    updateToggleLabel(isEnabled);
 
     // Load company name from current page
     await loadCompanyName(serverAvailable);
@@ -633,7 +652,33 @@ function deleteResume(resumeId) {
     renderResumeList();
 }
 
+function updateToggleLabel(enabled) {
+    const label = document.getElementById('toggleLabel');
+    label.textContent = enabled ? 'Enabled' : 'Disabled';
+    label.style.color = enabled ? '#2e7d32' : '#c62828';
+}
+
 function setupEventListeners() {
+    // Extension toggle
+    const toggle = document.getElementById('extensionToggle');
+    toggle.addEventListener('change', async (e) => {
+        const enabled = e.target.checked;
+        saveExtensionEnabled(enabled);
+        updateToggleLabel(enabled);
+
+        // Notify all tabs that extension state changed
+        chrome.tabs.query({}, (tabs) => {
+            tabs.forEach((tab) => {
+                chrome.tabs.sendMessage(tab.id, {
+                    action: 'extensionStateChanged',
+                    enabled: enabled
+                }).catch(() => {
+                    // Ignore errors for tabs that don't have content script
+                });
+            });
+        });
+    });
+
     document.getElementById('resumeUpload').addEventListener('change', handleResumeUpload);
     document.getElementById('fillButton').addEventListener('click', fillForm);
     document.getElementById('captureButton').addEventListener('click', captureAnswers);
