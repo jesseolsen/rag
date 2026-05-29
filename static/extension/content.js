@@ -2963,6 +2963,17 @@ function detectApplyButtonClick(event) {
         return;
     }
 
+    // Skip login/auth pages
+    const url = window.location.href.toLowerCase();
+    const isLoginPage = /login|sign.?in|signin|auth|authenticate|password|credential|2fa|mfa|verify/.test(url);
+    const pageTitle = document.title.toLowerCase();
+    const isTitleLogin = /login|sign.?in|signin|auth/.test(pageTitle);
+
+    if (isLoginPage || isTitleLogin) {
+        console.log('[RESUME_RAG] Skipping button click on login/auth page');
+        return;
+    }
+
     const target = event.target;
     const buttonText = target.textContent?.toLowerCase() || '';
     const buttonType = target.type?.toLowerCase() || '';
