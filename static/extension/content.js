@@ -2459,10 +2459,18 @@ function detectGlassdoorSalaryPage(url) {
     const pageText = document.body.textContent;
     let payRange = null;
 
-    // Range with en/em dash: "$74K – $147K"
-    const dashRangeMatch = pageText.match(/\$([\d,]+[KkMm]?)\s*[–—]\s*\$([\d,]+[KkMm]?)/);
-    if (dashRangeMatch) {
-        payRange = `$${dashRangeMatch[1].toUpperCase()}-$${dashRangeMatch[2].toUpperCase()}`;
+    // Priority 1: Look for "Total Pay" label specifically (appears in green at the top)
+    const totalPayMatch = pageText.match(/Total\s*Pay\s*\$([\d,]+[KkMm]?)\s*[–—]\s*\$([\d,]+[KkMm]?)/i);
+    if (totalPayMatch) {
+        payRange = `$${totalPayMatch[1].toUpperCase()}-$${totalPayMatch[2].toUpperCase()}`;
+    }
+
+    // Fallback: Range with en/em dash: "$74K – $147K"
+    if (!payRange) {
+        const dashRangeMatch = pageText.match(/\$([\d,]+[KkMm]?)\s*[–—]\s*\$([\d,]+[KkMm]?)/);
+        if (dashRangeMatch) {
+            payRange = `$${dashRangeMatch[1].toUpperCase()}-$${dashRangeMatch[2].toUpperCase()}`;
+        }
     }
     // Range with hyphen and spaces: "$74K - $147K"
     if (!payRange) {
