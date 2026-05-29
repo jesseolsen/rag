@@ -2465,14 +2465,17 @@ function detectGlassdoorSalaryPage(url) {
 
     let payRange = null;
 
-    // Priority 1: Target the "Total Pay" element by class (most reliable)
-    const totalPayElement = document.querySelector('[class*="TotalPayRange"][class*="PayRange"]');
-    if (totalPayElement) {
-        const totalPayText = totalPayElement.textContent;
-        const totalPayRangeMatch = totalPayText.match(/\$([\d,]+[KkMm]?)\s*[–—]\s*\$([\d,]+[KkMm]?)/);
-        if (totalPayRangeMatch) {
-            payRange = `$${totalPayRangeMatch[1].toUpperCase()}-$${totalPayRangeMatch[2].toUpperCase()}`;
+    // Priority 1: Target the "Total Pay" range element directly
+    // Look for the element containing the large green salary range text after "Total Pay" label
+    const totalPayElements = document.querySelectorAll('[class*="TotalPayRange"]');
+    for (const element of totalPayElements) {
+        const text = element.textContent;
+        // Look for pattern like "$125K - $178K" or "$125K–$178K"
+        const rangeMatch = text.match(/\$(\d+[KkMm]?)\s*[–—-]\s*\$(\d+[KkMm]?)/);
+        if (rangeMatch) {
+            payRange = `$${rangeMatch[1].toUpperCase()}-$${rangeMatch[2].toUpperCase()}`;
             console.log('[RESUME_RAG] Extracted Total Pay from DOM element:', payRange);
+            break;
         }
     }
 
