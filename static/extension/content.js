@@ -2456,27 +2456,45 @@ function detectGlassdoorSalaryPage(url) {
     }
     console.log('[RESUME_RAG] Glassdoor salary page for:', companyName);
 
-    const pageText = document.body.textContent;
     let payRange = null;
 
-    // Priority 1: Look for "Total Pay" label specifically (appears in green at the top)
-    const totalPayMatch = pageText.match(/Total\s*Pay\s*\$([\d,]+[KkMm]?)\s*[–—]\s*\$([\d,]+[KkMm]?)/i);
-    if (totalPayMatch) {
-        payRange = `$${totalPayMatch[1].toUpperCase()}-$${totalPayMatch[2].toUpperCase()}`;
+    // Priority 1: Target the "Total Pay" element by class (most reliable)
+    const totalPayElement = document.querySelector('[class*="TotalPayRange"][class*="PayRange"]');
+    if (totalPayElement) {
+        const totalPayText = totalPayElement.textContent;
+        const totalPayRangeMatch = totalPayText.match(/\$([\d,]+[KkMm]?)\s*[–—]\s*\$([\d,]+[KkMm]?)/);
+        if (totalPayRangeMatch) {
+            payRange = `$${totalPayRangeMatch[1].toUpperCase()}-$${totalPayRangeMatch[2].toUpperCase()}`;
+            console.log('[RESUME_RAG] Extracted Total Pay from DOM element:', payRange);
+        }
     }
 
-    // Fallback: Range with en/em dash: "$74K – $147K"
+    // Priority 2: Look for "Total Pay" label in page text (fallback)
     if (!payRange) {
+        const pageText = document.body.textContent;
+        const totalPayMatch = pageText.match(/Total\s*Pay\s*\$([\d,]+[KkMm]?)\s*[–—]\s*\$([\d,]+[KkMm]?)/i);
+        if (totalPayMatch) {
+            payRange = `$${totalPayMatch[1].toUpperCase()}-$${totalPayMatch[2].toUpperCase()}`;
+            console.log('[RESUME_RAG] Extracted Total Pay from text match:', payRange);
+        }
+    }
+
+    // Priority 3: Range with en/em dash: "$74K – $147K"
+    if (!payRange) {
+        const pageText = document.body.textContent;
         const dashRangeMatch = pageText.match(/\$([\d,]+[KkMm]?)\s*[–—]\s*\$([\d,]+[KkMm]?)/);
         if (dashRangeMatch) {
             payRange = `$${dashRangeMatch[1].toUpperCase()}-$${dashRangeMatch[2].toUpperCase()}`;
+            console.log('[RESUME_RAG] Extracted pay range from dash pattern:', payRange);
         }
     }
-    // Range with hyphen and spaces: "$74K - $147K"
+    // Priority 4: Range with hyphen and spaces: "$74K - $147K"
     if (!payRange) {
+        const pageText = document.body.textContent;
         const hyphenRangeMatch = pageText.match(/\$([\d,]+[KkMm]?)\s+-\s+\$([\d,]+[KkMm]?)/);
         if (hyphenRangeMatch) {
             payRange = `$${hyphenRangeMatch[1].toUpperCase()}-$${hyphenRangeMatch[2].toUpperCase()}`;
+            console.log('[RESUME_RAG] Extracted pay range from hyphen pattern:', payRange);
         }
     }
     // Single value fallback: "$108K/yr"
